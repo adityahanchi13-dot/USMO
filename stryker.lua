@@ -1,9 +1,13 @@
--- Stryker vehicle for Server Addons, rev 11.
+-- Stryker vehicle for Server Addons, rev 12.
 -- Commands: :spawn stryker, :stryker driver|commander|board, :fire, :vehicles, :cleanup vehicles
 --
 -- Driver seat drives. Commander seat aims the .50 cal (A/D traverse, W/S elevate) and fires
--- when the commander clicks the gun (or uses :fire). The parked position is kept in a marker
--- part so the vehicle is rebuilt in the same spot after a server save is loaded.
+-- when the commander clicks the gun (or clicks anywhere / uses :fire). The parked position is
+-- kept in a marker part so the vehicle is rebuilt in the same spot after a server save loads.
+--
+-- How it moves: the chassis stays ANCHORED and every other part is welded to it, exactly like
+-- the input lab's test gun. Each tick the script sets the chassis CFrame (raycasts find the
+-- ground and walls), so the server always controls it and the welded detail costs no physics.
 
 local Strykers = {}
 local SCALE = 1.25
@@ -12,18 +16,18 @@ local REVERSE_SPEED = 15
 local ACCELERATION = 0.05 -- share of the gap to target speed closed per 0.03 s
 local TURN_RADIUS = 45
 local MAX_STEER = math.rad(30)
-local STALL_GAP = 15 -- commanded speed may lead real speed by this much (stops shoving through walls)
 local MARKER_NAME = "StrykerSpawnMarker"
 local MARKER_UPDATE_INTERVAL = 0.5
-local DETAIL = false -- true adds ~230 bolts / lug nuts; costs build time and server physics
+local DETAIL = true -- full detail: bolts, lug nuts, valves, jacket holes
 local LIMITS = { MAX_ACTIVE = 4, SPAWN_COOLDOWN = 15, CLEANUP_COOLDOWN = 30 }
-local PERF = {
-  PARKED_MARKER = 2, IDLE_TICK = 0.25, DRIVE_TICK = 0.03, CREW_TICK = 0.25, WHEEL_TICK = 0.1,
-  SETTLE = 1.5, SERVER_PHYSICS = true, OWNER_TICK = 0.25, FLIP_TIME = 3,
+local PERF = { IDLE_TICK = 0.25, DRIVE_TICK = 0.03, CREW_TICK = 0.25, WHEEL_TICK = 0.1 }
+local DRIVE = {
+  GRAVITY = 196.2, MAX_STEP = 3.5, PROBE_UP = 4, PROBE_DOWN = 10, GROUND_EVERY = 0.5,
+  WALL_HEIGHTS = { 4.0, 7.5 }, WALL_NORMAL_Y = 0.7, TILT_BLEND = 0.25, FALL_LIMIT = -400,
 }
 local COPY = {
-  PREFIX = "StrykerAddon#", REVISION = 11, name = false, root = false, retired = false,
-  token = false, IGNORE_FROM = 50, world = false,
+  PREFIX = "StrykerAddon#", REVISION = 12, name = false, root = false, retired = false,
+  token = false, stamp = 0, world = false,
 }
 
 local function rgb(r, g, b) return Color3.new(r / 255, g / 255, b / 255) end
@@ -39,9 +43,6 @@ local MAT = {
   NEON = Enum.Material.Neon, FABRIC = Enum.Material.Fabric,
 }
 local SHAPE = { CYLINDER = Enum.PartType.Cylinder }
--- friction 0 with a high weight, so the combined friction against any floor is ~0.
--- (The old 0,0,0,0,0 had weight 0, which meant the FLOOR's friction won and dragged the tyres.)
-local SLICK = PhysicalProperties.new(0.7, 0, 0, 100, 1)
 local DIM = {
   CHASSIS_Y = 1.9, CHASSIS_Z = 3.96, ROOT_DENSITY = 30, WHEEL_R = 1.73, WHEEL_W = 1.3, WHEEL_X = 3.75,
   AXLES = { -6.52, -2.55, 1.75, 6.17 }, NOSE = -11.6, TAIL = 11.6, HULL_X = 4.3, LOWER_X = 2.9, BELLY_Y = 1.8,
@@ -53,7 +54,7 @@ local GUN = {
   RANGE = 1000, TRAVERSE_SPEED = math.rad(60), ELEVATE_SPEED = math.rad(45), MIN_PITCH = math.rad(-20),
   MAX_PITCH = math.rad(60), BURST = 5, ROUND_GAP = 0.09, COOLDOWN = 0.8, SPREAD = math.rad(0.3), MUZZLE = 4.95,
   RAMP_TIME = 2.0, DOT_EVERY = 0.08, CLICK_RANGE = 80, HIT_RADIUS = 2.5, DAMAGE = 25, TRACER_SPEED = 900,
-  RECOIL = 0.3,
+  RECOIL = 0.3, SEAT_RADIUS = 4.5, NAG_EVERY = 3,
   AUTO = false, -- true = fires by itself when the red dot is on an enemy
 }
 
@@ -73,6 +74,20 @@ local function weld(part0, part1)
   w.Part1 = part1
   w.Parent = part0
   return w
+end
+
+-- Same as the input lab's part(): set Parent, then hand the instance to f(). If f() moved it
+-- out to the map root, put it back so the whole vehicle stays in one Model (one Destroy()
+-- removes everything, and raycasts can skip the vehicle by filtering that Model).
+local function place(inst, parent)
+  if parent then pcall(function() inst.Parent = parent end) end
+  pcall(f, inst)
+  if parent then
+    local home = false
+    pcall(function() home = inst.Parent == parent end)
+    if not home then pcall(function() inst.Parent = parent end) end
+  end
+  return inst
 end
 
 local function tell(message, player) pcall(announce, message, player) end
@@ -318,13 +333,25 @@ local function isEnemy(target, gunner)
 end
 
 ---------------------------------------------------------------------------------------------
--- Effects (anchored, non-colliding, inside the vehicle model)
+-- Effects: the input lab's method. Each effect is one tween() instead of a server loop that
+-- moves parts every frame.
 ---------------------------------------------------------------------------------------------
 
 local FX = {
   FLASH = Color3.new(1, 0.86, 0.5), FIRE = Color3.new(1, 0.46, 0.12), SPARK = Color3.new(1, 0.82, 0.35),
-  TRACER = Color3.new(1, 0.62, 0.2), DUST = Color3.new(0.7, 0.62, 0.47), STEP = 0.03,
+  TRACER = Color3.new(1, 0.62, 0.2), DUST = Color3.new(0.7, 0.62, 0.47),
 }
+
+local function linear(t)
+  return TweenInfo.new(t, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, 0, false, 0)
+end
+
+local function removeLater(p, t)
+  task.spawn(function()
+    task.wait(t)
+    removePart(p)
+  end)
+end
 
 local function fxPart(holder, name, ball, size, cf, color, transparency)
   local p = Instance.new("Part")
@@ -339,27 +366,13 @@ local function fxPart(holder, name, ball, size, cf, color, transparency)
   p.CanCollide = false
   p.CanQuery = false
   p.CanTouch = false
-  pcall(function() p.CastShadow = false end)
-  local placed = false
-  if holder then placed = pcall(function() p.Parent = holder end) end
-  if not placed then f(p) end
-  return p
+  return place(p, holder)
 end
 
-local function bloom(p, grow, life)
-  task.spawn(function()
-    local size, start = p.Size, p.Transparency
-    local steps = math.max(2, math.floor(life / FX.STEP))
-    for i = 1, steps do
-      task.wait(FX.STEP)
-      local t = i / steps
-      pcall(function()
-        p.Size = size * (1 + (grow - 1) * t)
-        p.Transparency = start + (1 - start) * t
-      end)
-    end
-    removePart(p)
-  end)
+-- grow and fade out, then delete
+local function fade(p, life, grow)
+  pcall(tween, p, linear(life), { Transparency = 1, Size = p.Size * grow })
+  removeLater(p, life + 0.05)
 end
 
 local function glow(p, color, brightness, range)
@@ -391,46 +404,23 @@ local function smoke(holder, pos, size, rise, color, life)
   end)
 end
 
-local function sparks(holder, pos, normal, count, color, size, speed)
-  local list = {}
-  for _ = 1, count do
-    local dir = (normal + Vector3.new(math.random() - 0.5, math.random() - 0.3, math.random() - 0.5) * 1.8).Unit
-    local part = fxPart(holder, "Spark", false, Vector3.new(size, size, size * 3), CFrame.new(pos, pos + dir), color, 0)
-    table.insert(list, { dir = dir, part = part })
-  end
-  task.spawn(function()
-    for step = 1, 10 do
-      task.wait(FX.STEP)
-      local t = step * FX.STEP
-      for _, s in ipairs(list) do
-        pcall(function()
-          local p = pos + s.dir * speed * t - Vector3.new(0, 30 * t * t, 0)
-          s.part.CFrame = CFrame.new(p, p + s.dir)
-          s.part.Transparency = step / 10
-        end)
-      end
-    end
-    for _, s in ipairs(list) do removePart(s.part) end
-  end)
+local function impact(holder, pos, color, size)
+  local p = fxPart(holder, "Impact", true, Vector3.new(size, size, size), CFrame.new(pos), color, 0)
+  glow(p, color, 2, 8)
+  fade(p, 0.2, 3)
 end
 
-local function tracer(holder, from, to, width, speed)
+-- A glowing round that flies from the muzzle to the impact point on one tween, like the lab's
+-- shell. Returns how long the flight takes.
+local function tracer(holder, from, to, speed)
   local dist = (to - from).Magnitude
-  if dist < 0.5 then return end
+  if dist < 0.5 then return 0 end
   local dir = (to - from).Unit
-  local len = math.min(dist, 9)
-  local p = fxPart(holder, "Tracer", false, Vector3.new(width, width, len),
-    CFrame.new(from + dir * len / 2, from + dir * len), FX.TRACER, 0)
-  task.spawn(function()
-    local travel = dist - len
-    local steps = math.max(1, math.min(12, math.ceil(travel / speed / FX.STEP)))
-    for i = 1, steps do
-      task.wait(FX.STEP)
-      local head = from + dir * (len + travel * i / steps)
-      pcall(function() p.CFrame = CFrame.new(head - dir * len / 2, head) end)
-    end
-    removePart(p)
-  end)
+  local flight = math.max(0.03, dist / speed)
+  local p = fxPart(holder, "Tracer", false, Vector3.new(0.18, 0.18, 2.5), CFrame.new(from, from + dir), FX.TRACER, 0)
+  pcall(tween, p, linear(flight), { CFrame = CFrame.new(to, to + dir) })
+  removeLater(p, flight)
+  return flight
 end
 
 ---------------------------------------------------------------------------------------------
@@ -466,6 +456,19 @@ local function strike(victim, amount, safe)
   return hurtNpc(victim.humanoid, amount)
 end
 
+-- Is this player sitting in this seat? Same check as the lab's seatedInLab(): the occupant's
+-- name if the game lets us read it, otherwise the player standing right on the seat.
+local function inSeat(seat, player)
+  if not seat or not player then return false end
+  local occupied = false
+  pcall(function() occupied = seat.Occupant ~= nil end)
+  if not occupied then return false end
+  local ok, name = pcall(function() return seat.Occupant.Parent.Name end)
+  if ok and name == player then return true end
+  local pos = playerPos(player)
+  return pos ~= nil and (pos - seat.Position).Magnitude < GUN.SEAT_RADIUS
+end
+
 local function fireBurst(entry, shooter)
   local hits, killed, order = {}, {}, {}
   for round = 1, GUN.BURST do
@@ -475,24 +478,31 @@ local function fireBurst(entry, shooter)
     local spread = CFrame.Angles((math.random() - 0.5) * 2 * GUN.SPREAD, (math.random() - 0.5) * 2 * GUN.SPREAD, 0)
     local dir = (muzzle * spread).LookVector
     local from = muzzle.Position
-    local flare = fxPart(entry.car, "MuzzleFlash", true, Vector3.new(0.8, 0.8, 0.8), CFrame.new(from + dir * 0.5), FX.FLASH, 0)
-    glow(flare, FX.FLASH, 3, 12)
-    bloom(flare, 1.8, 0.06)
+    local flash = fxPart(entry.car, "MuzzleFlash", true, Vector3.new(0.9, 0.9, 0.9), CFrame.new(from + dir * 0.5), FX.FLASH, 0)
+    glow(flash, FX.FLASH, 3, 12)
+    fade(flash, 0.08, 2)
     entry.recoil = GUN.RECOIL
+    -- Hitscan: where the round lands is decided now; the tracer just shows it getting there.
     local to, hit = aimPoint(entry, from, dir, GUN.RANGE, true)
-    tracer(entry.car, from, to, 0.15, GUN.TRACER_SPEED)
+    local victim = victimOf(hit)
+    local dead = strike(victim, GUN.DAMAGE, entry.aboard or {})
+    if dead ~= nil then
+      if not hits[victim.name] then table.insert(order, victim.name) end
+      hits[victim.name] = (hits[victim.name] or 0) + 1
+      if dead then killed[victim.name] = true end
+    end
+    local flight = tracer(entry.car, from, to, GUN.TRACER_SPEED)
     if hit then
-      local victim = victimOf(hit)
-      local dead = strike(victim, GUN.DAMAGE, entry.aboard or {})
-      if dead ~= nil then
-        if not hits[victim.name] then table.insert(order, victim.name) end
-        hits[victim.name] = (hits[victim.name] or 0) + 1
-        if dead then killed[victim.name] = true end
-        sparks(entry.car, to, -dir, 3, FX.FIRE, 0.12, 22)
-      else
-        sparks(entry.car, to, -dir, 4, FX.SPARK, 0.1, 30)
-        smoke(entry.car, to, 1.5, 2, FX.DUST, 0.25)
-      end
+      task.spawn(function()
+        task.wait(flight)
+        if not alive(entry) then return end
+        if dead ~= nil then
+          impact(entry.car, to, FX.FIRE, 0.6)
+        else
+          impact(entry.car, to, FX.SPARK, 0.4)
+          smoke(entry.car, to, 1.5, 2, FX.DUST, 0.25)
+        end
+      end)
     end
   end
   local lines = {}
@@ -504,28 +514,28 @@ local function fireBurst(entry, shooter)
   if #lines > 0 and shooter then tell(".50 cal: " .. table.concat(lines, "; "), shooter) end
 end
 
-local function shoot(entry)
+local function shoot(entry, shooter)
   if tick() < entry.nextBurst then return end
   entry.nextBurst = tick() + GUN.BURST * GUN.ROUND_GAP + GUN.COOLDOWN
-  task.spawn(fireBurst, entry, entry.commander or entry.fireBy)
+  task.spawn(fireBurst, entry, shooter)
 end
 
--- Only the player in the commander seat can fire.
+-- Called straight from the ClickDetector, like the lab's test gun: no flag for another loop
+-- to pick up. Only the player sitting in the commander seat can fire.
 local function gunnerFire(entry, who)
   local name = nameOf(who)
-  if not alive(entry) or not entry.allSeats then return end
+  if not name or not alive(entry) or not entry.allSeats then return end
   local gunSeat = entry.allSeats[2].seat
-  if not gunSeat.Occupant then
-    if name then tell("Sit in the commander seat to fire the .50.", name) end
+  if inSeat(gunSeat, name) then
+    entry.commander = entry.commander or name
+    shoot(entry, name)
     return
   end
-  local commander = entry.commander or occupantName(gunSeat)
-  if name and commander and name ~= commander then
-    tell("Only the Stryker's commander can fire the .50.", name)
-    return
+  entry.nagged = entry.nagged or {}
+  if tick() - (entry.nagged[name] or 0) > GUN.NAG_EVERY then
+    entry.nagged[name] = tick()
+    tell("Sit in the Stryker's commander seat to fire the .50.", name)
   end
-  entry.fireBy = name
-  entry.fireWanted = true
 end
 
 ---------------------------------------------------------------------------------------------
@@ -578,8 +588,7 @@ local function makeAimDot(car, at)
   dot.CanCollide = false
   dot.CanQuery = false
   dot.CanTouch = false
-  dot.Parent = car
-  return dot
+  return place(dot, car)
 end
 
 local function showAimDot(entry, from, dir, range)
@@ -622,23 +631,13 @@ local function keepRunning(entry, name, fn)
   end)
 end
 
--- The script runs on the server, so the server must own the physics. Otherwise the VehicleSeat
--- hands ownership to the driver's client and the velocities set here get overwritten.
-local function serverPhysics(chassis)
-  if not PERF.SERVER_PHYSICS then return end
-  pcall(function()
-    if not chassis.Anchored and chassis:GetNetworkOwner() ~= nil then chassis:SetNetworkOwner(nil) end
-  end)
-end
-
 ---------------------------------------------------------------------------------------------
 -- Builder
 ---------------------------------------------------------------------------------------------
 
--- Parts are parented straight into the car Model, which is already in the map via f(car).
--- f(part) is NOT called on them: f() parents its argument to the map, which pulled every
--- part out of the Model. Then car:Destroy() and the gun's ray filter missed them all, and each
--- respawn or save left hundreds of loose welded parts in the map.
+-- Every part goes through place(): Parent into the car Model, then f(), then back into the
+-- Model if f() moved it. The old code let f() pull parts out to the map root, so car:Destroy()
+-- and the gun's ray filter missed them, and every respawn or save left loose parts behind.
 local function newKit(car, root, entry)
   local k = { parts = {}, wheels = {}, troopSeats = {} }
   entry.parts = k.parts
@@ -662,8 +661,7 @@ local function newKit(car, root, entry)
     p.CanTouch = false
     p.CanQuery = false
     p.Massless = true
-    pcall(function() p.CastShadow = false end)
-    p.Parent = car
+    place(p, car)
     if weldTo then weld(weldTo, p) end
     table.insert(k.parts, p)
     if #k.parts % 25 == 0 then task.wait() end
@@ -682,11 +680,10 @@ local function newKit(car, root, entry)
     if not DETAIL then return nil end
     return k.cylinder("Bolt", 0.06, 0.16, cf, COLOR.TAN_DARK, MAT.METAL, weldTo)
   end
-  -- A collidable hull panel. Slick so scraping a wall or kerb doesn't snag the vehicle.
+  -- A hull panel players can't walk through.
   function k.solid(p)
     p.CanCollide = true
     p.CanQuery = true
-    p.CustomPhysicalProperties = SLICK
     return p
   end
   function k.seat(className, name, cf, weldTo)
@@ -696,9 +693,11 @@ local function newKit(car, root, entry)
     s.CanQuery = true
     return s
   end
+  -- invisible handle that holds a prompt and can be clicked to get in
   function k.anchor(name, x, y, z, weldTo)
-    local p = k.block(name, 0.4, 0.4, 0.4, k.at(x, y, z), COLOR.BLACK, MAT.SMOOTH, weldTo)
+    local p = k.block(name, 1.6, 2.4, 1.6, k.at(x, y, z), COLOR.BLACK, MAT.SMOOTH, weldTo)
     p.Transparency = 1
+    p.CanQuery = true
     return p
   end
   function k.joint(name, part0, part1, offset, c1)
@@ -721,7 +720,6 @@ local function buildWheel(k, name, x, z, steer)
   local tyre = k.cylinder(name, w, r * 2, k.at(x, y, z), COLOR.RUBBER, MAT.RUBBER, false)
   tyre.CanCollide = true
   tyre.CanQuery = true
-  tyre.CustomPhysicalProperties = SLICK
   local face = x + s * w / 2
   k.cylinder("Rim", 0.1, r * 1.2, k.at(face, y, z), COLOR.TAN, MAT.SMOOTH, tyre)
   k.cylinder("Hub", 0.28, r * 0.55, k.at(face + s * 0.12, y, z), COLOR.TAN_DARK, MAT.METAL, tyre)
@@ -751,7 +749,7 @@ local function buildHull(k)
   block("Floor", lx * 2, DIM.FLOOR_Y - DIM.BELLY_Y, tail + 9.4, at(0, (DIM.FLOOR_Y + DIM.BELLY_Y) / 2, (tail - 9.4) / 2), COLOR.TAN_DARK, MAT.SMOOTH, c)
   block("LowerFront", lx * 2, sp - DIM.FLOOR_Y, bz + 9.4, at(0, (sp + DIM.FLOOR_Y) / 2, (bz - 9.4) / 2), COLOR.TAN, MAT.SMOOTH, c)
   wedge("LowerGlacis", lx * 2, sp - DIM.BELLY_Y, 2.2, at(0, (sp + DIM.BELLY_Y) / 2, -10.5) * rz(180), COLOR.TAN, MAT.SMOOTH, c)
-  -- The nose collides so the hull stops at walls instead of the tyres being the only contact.
+  -- Solid outer panels, so players can't walk through the hull.
   solid(block("Bow", hx * 2, DIM.NOSE_Y - sp, frontLen, at(0, (DIM.NOSE_Y + sp) / 2, frontZ), COLOR.TAN, MAT.SMOOTH, c))
   solid(wedge("UpperGlacis", hx * 2, roof - DIM.NOSE_Y, frontLen, at(0, (roof + DIM.NOSE_Y) / 2, frontZ), COLOR.TAN, MAT.SMOOTH, c))
   block("FrontSection", hx * 2, roof - sp, bz - DIM.GLACIS_Z, at(0, (roof + sp) / 2, (bz + DIM.GLACIS_Z) / 2), COLOR.TAN, MAT.SMOOTH, c)
@@ -1226,122 +1224,242 @@ local function addPrompts(entry, anchors)
     p.ramp.Triggered:Connect(function() entry.rampOpen = not entry.rampOpen end)
   end)
   if not ok then print("[Stryker] key prompts unavailable: " .. tostring(err)) end
-end
 
----------------------------------------------------------------------------------------------
--- Driving
----------------------------------------------------------------------------------------------
-
-local function setFrozen(entry, frozen)
-  entry.frozen = frozen
-  pcall(function()
-    if frozen then
-      entry.chassis.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-      entry.chassis.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+  -- Clicking works in this game (the input lab proved it), so the doors are clickable too:
+  -- click the driver or commander door to get in, click the back to board.
+  local function clickable(part, onClick)
+    pcall(function()
+      local detector = Instance.new("ClickDetector")
+      detector.MaxActivationDistance = 16
+      detector.Parent = part
+      detector.MouseClick:Connect(onClick)
+    end)
+  end
+  clickable(anchors.driver, function(who) takeSeat(entry.allSeats[1], who) end)
+  clickable(anchors.commander, function(who) takeSeat(entry.allSeats[2], who) end)
+  clickable(anchors.rear, function(who)
+    for i = 3, #entry.allSeats do
+      local seatInfo = entry.allSeats[i]
+      if not seatInfo.name and not seatInfo.seat.Occupant then
+        takeSeat(seatInfo, who)
+        return
+      end
     end
-    entry.chassis.Anchored = frozen
+    local name = nameOf(who)
+    if name then tell("The troop compartment is full.", name) end
   end)
 end
+
+---------------------------------------------------------------------------------------------
+-- Driving. The chassis is anchored and moved by CFrame (raycasts for ground and walls).
+-- Unanchored physics driven by the server never worked here: the VehicleSeat hands physics to
+-- the driver's client, which threw away the server's velocity, so the wheel welds turned but
+-- the hull never moved. An anchored part is always the server's, and welded parts follow it.
+---------------------------------------------------------------------------------------------
 
 -- Frame-rate independent version of "close `share` of the gap every 0.03 s".
 local function blend(share, dt) return 1 - (1 - share) ^ (dt / 0.03) end
 
+-- First thing along the ray a vehicle can stand on or hit. Skips players (the API returns their
+-- name as a string) and non-colliding parts such as trigger zones; the vehicle itself is
+-- filtered out by `params`.
+local function solidHit(origin, dir, params)
+  local length = dir.Magnitude
+  if length < 0.001 then return nil end
+  local unit = dir / length
+  local travelled = 0
+  for _ = 1, 5 do
+    local hit = castRay(origin + unit * travelled, unit * (length - travelled), params)
+    if not hit then return nil end
+    local solid, hitPos = false, nil
+    pcall(function()
+      hitPos = hit.Position
+      if type(hit.Instance) ~= "string" then solid = hit.Instance.CanCollide == true end
+    end)
+    if solid then return hit end
+    if not hitPos then return nil end
+    travelled = (hitPos - origin).Magnitude + 0.05
+    if travelled >= length then return nil end
+  end
+  return nil
+end
+
+local function headingOf(cf)
+  local look = cf.LookVector
+  return math.atan2(-look.X, -look.Z)
+end
+
+local function yawFrame(pos, heading)
+  return CFrame.new(pos) * CFrame.Angles(0, heading, 0)
+end
+
+local function vehicleFrame(state)
+  return yawFrame(state.pos, state.heading) * CFrame.Angles(state.pitch, 0, state.roll)
+end
+
+-- Ground height under the front axle, rear axle and the left / right wheel lines.
+local function sampleGround(entry, yawCF, baseY)
+  local meanZ = 0
+  for _, z in ipairs(DIM.AXLES) do meanZ = meanZ + z end
+  meanZ = meanZ / #DIM.AXLES * SCALE
+  local points = {
+    front = Vector3.new(0, 0, DIM.AXLES[1] * SCALE),
+    rear = Vector3.new(0, 0, DIM.AXLES[#DIM.AXLES] * SCALE),
+    left = Vector3.new(-DIM.WHEEL_X * SCALE, 0, meanZ),
+    right = Vector3.new(DIM.WHEEL_X * SCALE, 0, meanZ),
+  }
+  local heights = {}
+  for key, offset in pairs(points) do
+    local world = yawCF * offset
+    local origin = Vector3.new(world.X, baseY + DRIVE.PROBE_UP, world.Z)
+    local hit = solidHit(origin, Vector3.new(0, -(DRIVE.PROBE_UP + DRIVE.PROBE_DOWN), 0), entry.params)
+    if hit then heights[key] = hit.Position.Y end
+  end
+  return heights
+end
+
+-- Would moving `distance` along the heading run the nose (or the tail, reversing) into a wall?
+local function blockedAhead(entry, yawCF, distance)
+  local sign = 1
+  if distance < 0 then sign = -1 end
+  local edgeZ = DIM.NOSE * SCALE + 0.5
+  if sign < 0 then edgeZ = DIM.TAIL * SCALE - 0.5 end
+  local dir = yawCF.LookVector * sign * (math.abs(distance) + 1)
+  local side = DIM.HULL_X * SCALE - 0.3
+  for _, x in ipairs({ -side, 0, side }) do
+    for _, y in ipairs(DRIVE.WALL_HEIGHTS) do
+      local hit = solidHit(yawCF * Vector3.new(x, y, edgeZ), dir, entry.params)
+      if hit then
+        local normalY = 0
+        pcall(function() normalY = hit.Normal.Y end)
+        if normalY < DRIVE.WALL_NORMAL_Y then return true end
+      end
+    end
+  end
+  return false
+end
+
 local function driveStryker(entry)
   local chassis = entry.chassis
   local seat = entry.allSeats[1].seat
+  local state = entry.drive
+  local wheelbase = (DIM.AXLES[#DIM.AXLES] - DIM.AXLES[1]) * SCALE
+  local track = DIM.WHEEL_X * 2 * SCALE
   local speed, steerAngle, rolled = 0, 0, 0
   local shownSteer, shownRolled, lastWheels = 0, 0, 0
-  local restFor, flippedFor, ownFor = 0, 0, 0
+  local groundCheck = 0
   local last = tick()
   while alive(entry) do
-    if entry.frozen then
-      task.wait(PERF.IDLE_TICK)
-      if seat.Occupant then
-        setFrozen(entry, false)
-        serverPhysics(chassis)
-        speed = 0
-        last = tick()
-      end
-    else
+    local occupied = seat.Occupant ~= nil
+    if occupied or speed ~= 0 or not state.grounded then
       task.wait(PERF.DRIVE_TICK)
-      local now = tick()
-      local dt = math.min(now - last, 0.2)
-      last = now
-      ownFor = ownFor + dt
-      if ownFor >= PERF.OWNER_TICK then
-        ownFor = 0
-        serverPhysics(chassis)
-      end
+    else
+      task.wait(PERF.IDLE_TICK)
+    end
+    local now = tick()
+    local dt = math.min(now - last, 0.2)
+    last = now
 
-      local occupied = seat.Occupant ~= nil
-      local throttle, steer = 0, 0
-      if occupied then
-        throttle = seat.Throttle
-        steer = seat.Steer
-      end
-      local target = throttle * MAX_SPEED
-      if throttle < 0 then target = throttle * REVERSE_SPEED end
-      if occupied then
-        speed = speed + (target - speed) * blend(ACCELERATION, dt)
+    local throttle, steer = 0, 0
+    if seat.Occupant then
+      throttle = seat.Throttle
+      steer = seat.Steer
+    end
+    local target = throttle * MAX_SPEED
+    if throttle < 0 then target = throttle * REVERSE_SPEED end
+    if seat.Occupant then
+      speed = speed + (target - speed) * blend(ACCELERATION, dt)
+    else
+      speed = speed * (1 - blend(0.2, dt))
+    end
+    if throttle == 0 and math.abs(speed) < 0.05 then speed = 0 end
+    steerAngle = steerAngle + (-steer * MAX_STEER - steerAngle) * blend(0.15, dt)
+    if steer == 0 and math.abs(steerAngle) < 0.002 then steerAngle = 0 end
+
+    -- move along the ground, unless a wall is in the way
+    local pos, heading = state.pos, state.heading
+    local step = speed * dt
+    if step ~= 0 and state.grounded then
+      if blockedAhead(entry, yawFrame(pos, heading), step) then
+        speed, step = 0, 0
       else
-        speed = speed * (1 - blend(0.2, dt))
+        heading = heading + speed / TURN_RADIUS * (steerAngle / MAX_STEER) * dt
+        pos = pos + yawFrame(pos, heading).LookVector * step
       end
-      if throttle == 0 and math.abs(speed) < 0.05 then speed = 0 end
-      steerAngle = steerAngle + (-steer * MAX_STEER - steerAngle) * blend(0.15, dt)
-      if steer == 0 and math.abs(steerAngle) < 0.002 then steerAngle = 0 end
+    elseif not state.grounded then
+      step = 0 -- no steering in mid-air
+    end
 
-      local cf = chassis.CFrame
-      local velocity = chassis.AssemblyLinearVelocity
-      local spin = chassis.AssemblyAngularVelocity
-      -- Drive along the ground plane only. Using the tilted LookVector and then adding the
-      -- old Y velocity back on stacked vertical speed every tick, so slopes launched the hull.
-      local forward = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
-      if forward.Magnitude > 0.1 and cf.UpVector.Y > 0.3 then
-        forward = forward.Unit
-        local actual = Vector3.new(velocity.X, 0, velocity.Z):Dot(forward)
-        speed = math.max(actual - STALL_GAP, math.min(actual + STALL_GAP, speed))
-        local turn = speed / TURN_RADIUS * (steerAngle / MAX_STEER)
-        chassis.AssemblyLinearVelocity = forward * speed + Vector3.new(0, velocity.Y, 0)
-        -- Keep some pitch/roll so the hull follows slopes; damp it so it can't tip over.
-        chassis.AssemblyAngularVelocity = Vector3.new(spin.X * 0.5, turn, spin.Z * 0.5)
-        flippedFor = 0
+    -- follow the ground (and fall when there isn't any)
+    groundCheck = groundCheck - dt
+    if step ~= 0 or not state.grounded or groundCheck <= 0 then
+      groundCheck = DRIVE.GROUND_EVERY
+      local heights = sampleGround(entry, yawFrame(pos, heading), state.pos.Y)
+      local lead = nil
+      if step > 0 then lead = heights.front elseif step < 0 then lead = heights.rear end
+      if lead and lead - state.pos.Y > DRIVE.MAX_STEP then
+        -- a ledge too tall to climb: treat it as a wall
+        pos, heading, speed = state.pos, state.heading, 0
       else
-        -- On its side or roof: put it back on its wheels after a few seconds.
-        speed = 0
-        flippedFor = flippedFor + dt
-        if flippedFor >= PERF.FLIP_TIME then
-          flippedFor = 0
-          local look = cf.LookVector
-          if Vector3.new(look.X, 0, look.Z).Magnitude < 0.1 then look = cf.UpVector end
-          chassis.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-          chassis.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-          chassis.CFrame = flatFrame(cf.Position + Vector3.new(0, 4, 0), look)
+        local sum, n = 0, 0
+        for _, y in pairs(heights) do
+          sum = sum + y
+          n = n + 1
         end
-      end
-
-      rolled = rolled + speed * dt
-      if now - lastWheels >= PERF.WHEEL_TICK and (rolled ~= shownRolled or steerAngle ~= shownSteer) then
-        lastWheels = now
-        shownRolled, shownSteer = rolled, steerAngle
-        rolled = rolled % (2 * math.pi * DIM.WHEEL_R * SCALE)
-        shownRolled = rolled
-        for _, w in ipairs(entry.wheels) do
-          w.weld.C0 = w.base * CFrame.Angles(0, steerAngle * w.steer, 0)
-            * CFrame.Angles(-rolled / (DIM.WHEEL_R * SCALE), 0, 0)
+        local y = pos.Y
+        if n > 0 then
+          local groundY = sum / n
+          if groundY >= y - 0.05 then
+            y = groundY
+            state.vy = 0
+            state.grounded = true
+          else
+            state.vy = state.vy - DRIVE.GRAVITY * dt
+            y = math.max(groundY, y + state.vy * dt)
+            state.grounded = y <= groundY + 0.01
+            if state.grounded then state.vy = 0 end
+          end
+          local pitch, roll = state.pitch, state.roll
+          if heights.front and heights.rear then pitch = math.atan2(heights.front - heights.rear, wheelbase) end
+          if heights.left and heights.right then roll = math.atan2(heights.right - heights.left, track) end
+          local k = blend(DRIVE.TILT_BLEND, dt)
+          state.pitch = state.pitch + (pitch - state.pitch) * k
+          state.roll = state.roll + (roll - state.roll) * k
+        else
+          state.vy = state.vy - DRIVE.GRAVITY * dt
+          y = y + state.vy * dt
+          state.grounded = false
         end
-      end
-
-      if math.abs(speed) > 3 then entry.rampOpen = false end
-      if not occupied and speed == 0 then
-        restFor = restFor + dt
-        if restFor >= PERF.SETTLE and math.abs(velocity.Y) < 0.3 then
-          setFrozen(entry, true)
-          restFor = 0
-        end
-      else
-        restFor = 0
+        pos = Vector3.new(pos.X, y, pos.Z)
       end
     end
+
+    local moved = (pos - state.pos).Magnitude > 0.001 or heading ~= state.heading
+      or math.abs(state.pitch - (state.shownPitch or 0)) > 0.0005
+      or math.abs(state.roll - (state.shownRoll or 0)) > 0.0005
+    state.pos, state.heading = pos, heading
+    if moved then
+      state.shownPitch, state.shownRoll = state.pitch, state.roll
+      chassis.CFrame = vehicleFrame(state) * entry.chassisOffset
+    end
+    if pos.Y < DRIVE.FALL_LIMIT then
+      print("[Stryker] " .. entry.owner .. "'s Stryker fell out of the map")
+      tell("Your Stryker fell out of the map. Spawn a new one with :spawn stryker.", entry.owner)
+      destroyStryker(entry.key)
+      return
+    end
+
+    rolled = rolled + speed * dt
+    if now - lastWheels >= PERF.WHEEL_TICK and (rolled ~= shownRolled or steerAngle ~= shownSteer) then
+      lastWheels = now
+      rolled = rolled % (2 * math.pi * DIM.WHEEL_R * SCALE)
+      shownRolled, shownSteer = rolled, steerAngle
+      for _, w in ipairs(entry.wheels) do
+        w.weld.C0 = w.base * CFrame.Angles(0, steerAngle * w.steer, 0)
+          * CFrame.Angles(-rolled / (DIM.WHEEL_R * SCALE), 0, 0)
+      end
+    end
+    if math.abs(speed) > 3 then entry.rampOpen = false end
   end
 end
 
@@ -1402,15 +1520,10 @@ local function stationLoop(entry)
         lastDot = now
         local muzzle = entry.cradle.CFrame * CFrame.new(0, 0, -GUN.MUZZLE * SCALE)
         local hit = showAimDot(entry, muzzle.Position, muzzle.LookVector, GUN.RANGE)
-        if GUN.AUTO and isEnemy(victimOf(hit), entry.commander) then entry.fireWanted = true end
+        if GUN.AUTO and isEnemy(victimOf(hit), entry.commander) then shoot(entry, entry.commander) end
       end
     else
       hideAimDot(entry)
-    end
-
-    if entry.fireWanted then
-      entry.fireWanted = false
-      if occupied then shoot(entry) end
     end
   end
 end
@@ -1429,7 +1542,7 @@ local function buildStryker(owner, car, root, entry, dropOwnerIn)
   marker.CanCollide = false
   marker.CanQuery = false
   marker.CanTouch = false
-  marker.Parent = car
+  place(marker, car)
   entry.marker = marker
 
   local k = newKit(car, root, entry)
@@ -1495,10 +1608,14 @@ local function buildStryker(owner, car, root, entry, dropOwnerIn)
   entry.nextBurst = 0
   addPrompts(entry, anchors)
 
-  -- Unanchor last, after every weld exists, so nothing falls apart mid-build.
-  for _, p in ipairs(k.parts) do p.Anchored = false end
-  entry.frozen = false
-  serverPhysics(chassis)
+  -- Unanchor everything except the chassis, last, after every weld exists. The anchored
+  -- chassis carries the welded parts (and seated players) wherever its CFrame is set.
+  entry.params = rayParams({ car })
+  entry.chassisOffset = k.off(0, DIM.CHASSIS_Y, DIM.CHASSIS_Z)
+  entry.drive = { pos = root.Position, heading = headingOf(root), pitch = 0, roll = 0, vy = 0, grounded = false }
+  for _, p in ipairs(k.parts) do
+    if p ~= chassis then p.Anchored = false end
+  end
 
   keepRunning(entry, "driving", function() driveStryker(entry) end)
   keepRunning(entry, "gun and crew", function() stationLoop(entry) end)
@@ -1507,7 +1624,7 @@ local function buildStryker(owner, car, root, entry, dropOwnerIn)
   task.spawn(function()
     local shown = root
     while alive(entry) do
-      if entry.frozen then task.wait(PERF.PARKED_MARKER) else task.wait(MARKER_UPDATE_INTERVAL) end
+      task.wait(MARKER_UPDATE_INTERVAL)
       pcall(function()
         local ground = chassis.CFrame * CFrame.new(0, -DIM.CHASSIS_Y * SCALE, -DIM.CHASSIS_Z * SCALE)
         local cf = flatFrame(ground.Position, ground.LookVector)
@@ -1529,7 +1646,7 @@ local function createStryker(key, owner, root, dropOwnerIn)
   local car = Instance.new("Model")
   car.Name = owner .. "_Stryker"
   f(car) -- the Model goes into the map first; parts are then parented into it
-  local entry = { car = car, carName = car.Name, owner = owner, seats = {}, aboard = {}, parts = {} }
+  local entry = { key = key, car = car, carName = car.Name, owner = owner, seats = {}, aboard = {}, parts = {} }
   Strykers[key] = entry
   local ok, err = pcall(buildStryker, owner, car, root, entry, dropOwnerIn)
   if not ok then
@@ -1586,16 +1703,13 @@ local function spawnStryker(player)
   createStryker(player, player, flatFrame(ground + Vector3.new(0, 0.3, 0), playerCF.LookVector), true)
 end
 
+-- :fire and the mousedown event: fire the gun of whichever Stryker this player commands.
 local function chatControl(player)
   for _, entry in pairs(Strykers) do
     local inside = false
-    pcall(function()
-      local seat = entry.allSeats[2].seat
-      inside = alive(entry) and seat.Occupant ~= nil
-        and (entry.commander == player or occupantName(seat) == player)
-    end)
+    pcall(function() inside = alive(entry) and inSeat(entry.allSeats[2].seat, player) end)
     if inside then
-      gunnerFire(entry, player)
+      shoot(entry, player)
       return
     end
   end
@@ -1655,7 +1769,7 @@ local function strykerOwner(model)
   return nil
 end
 
--- If the saved model's wheels disagree with the marker, trust the wheels.
+-- Where a saved model was parked, worked out from its wheels (used when there is no marker).
 local function parkedFromTyres(model)
   local ok, parked = pcall(function()
     local sum = Vector3.new(0, 0, 0)
@@ -1762,13 +1876,18 @@ local function clearLeftovers()
 end
 
 ---------------------------------------------------------------------------------------------
--- One running copy at a time (re-running the addon retires the old copy)
+-- One running copy at a time. If the addon is run again, the newer copy takes over and the
+-- older one goes quiet. A token left over in a saved map is never treated as a rival: it is
+-- older than this copy, so it gets cleared. (Rev 10 retired itself whenever a saved map
+-- brought its own old token back, and then ignored every command; that was one reason
+-- ":spawn stryker" sometimes did nothing.)
 ---------------------------------------------------------------------------------------------
 
 local function stampToken()
   pcall(function()
+    COPY.stamp = math.floor(tick())
     local token = Instance.new("Part")
-    token.Name = COPY.PREFIX .. COPY.REVISION .. "#" .. math.floor(tick() * 1000) % 1000000000 .. "-" .. math.random(1, 999999)
+    token.Name = COPY.PREFIX .. COPY.REVISION .. "#" .. string.format("%d", COPY.stamp) .. "-" .. math.random(1, 999999)
     token.Size = Vector3.new(0.2, 0.2, 0.2)
     token.Transparency = 1
     token.Anchored = true
@@ -1782,47 +1901,51 @@ local function stampToken()
   end)
 end
 
-local function rivalTokens()
-  local tokens, newest = {}, 0
+-- Other copies' tokens. Ones from newer copies (higher revision, or same revision started
+-- later) are returned; older ones are deleted on sight.
+local function newerRivals()
+  local newer = {}
   pcall(function()
     for _, inst in ipairs(mapRoot():GetChildren()) do
-      local rev = string.match(inst.Name, "^" .. COPY.PREFIX .. "(%d+)#")
+      local rev, stamp = string.match(inst.Name, "^StrykerAddon#(%d+)#(%d+)")
       if rev and inst.Name ~= COPY.name then
-        if tonumber(rev) >= COPY.IGNORE_FROM then
-          dispose(inst)
+        rev, stamp = tonumber(rev), tonumber(stamp)
+        if rev > COPY.REVISION or (rev == COPY.REVISION and stamp > COPY.stamp) then
+          table.insert(newer, inst)
         else
-          table.insert(tokens, inst)
-          newest = math.max(newest, tonumber(rev))
+          dispose(inst)
         end
       end
     end
   end)
-  return tokens, newest
+  return newer
 end
 
 local function claimCopy()
-  local tokens, newest = rivalTokens()
-  if newest > COPY.REVISION then
+  COPY.stamp = math.floor(tick())
+  if #newerRivals() > 0 then
     COPY.retired = true
     print("[Stryker] a newer copy of this addon is running, so this one stays inactive")
     return false
   end
-  for _, old in ipairs(tokens) do dispose(old) end
   stampToken()
-  return COPY.name ~= false
+  return true
 end
 
 local function copyActive()
-  if COPY.retired or not COPY.token then return false end
+  if COPY.retired then return false end
   local here = false
-  pcall(function() here = COPY.token.Parent ~= nil and COPY.token.Name == COPY.name end)
+  pcall(function() here = COPY.token and COPY.token.Parent ~= nil and COPY.token.Name == COPY.name end)
   if here then return true end
-  if #rivalTokens() > 0 then
+  if #newerRivals() > 0 then
     COPY.retired = true
     print("[Stryker] a newer copy of this addon took over, so this one goes inactive")
     return false
   end
+  -- our token was cleared (map reload, cleanup): put it back and carry on
+  local stamp = COPY.stamp
   stampToken()
+  COPY.stamp = stamp
   return true
 end
 
@@ -1840,7 +1963,8 @@ local function restoreSavedStrykers()
     if job.model then
       owner = strykerOwner(job.model)
       local parked = parkedFromTyres(job.model)
-      if parked and (not root or (parked.Position - root.Position).Magnitude > 4) then root = parked end
+      -- the marker is anchored, so it is the reliable record; tyres are the fallback
+      if parked and not root then root = parked end
     end
     dispose(job.model)
     dispose(job.marker)
@@ -1894,7 +2018,7 @@ end)
 event("mousedown", function(data)
   local player = nil
   pcall(function() player = data.Value[1] end)
-  if type(player) == "string" and COPY.name and not COPY.retired then task.spawn(chatControl, player) end
+  if type(player) == "string" and not COPY.retired then task.spawn(chatControl, player) end
 end)
 
 local function versionReport(player)
