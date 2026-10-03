@@ -1,6 +1,6 @@
 -- Stryker addon, SIMPLE version. Detailed model + driving + turret + working ramp.
 -- No combat, no saving, no freeze system. Each vehicle is independent.
--- Commands: :spawn stryker, :cleanup vehicles
+-- Commands: :spawn stryker, :stryker alive, :cleanup vehicles
 
 local Strykers = {}
 
@@ -656,23 +656,50 @@ local function buildStryker(owner, root, entry)
   end)
 
   -- ===== DRIVE LOOP =====
+  -- Kept light on purpose: the game can stop an addon that does too much work, which freezes the
+  -- vehicle and stops every command (respawn included). Full speed (every 0.03 s) only while someone
+  -- is driving or it is still rolling; four checks a second when parked. Wheels redraw 10 times a second.
+  local sentinels = { chassis, k.parts[2], k.parts[math.floor(#k.parts / 2)], k.parts[#k.parts] }
   task.spawn(function()
     local speed = 0
     local steerAngle = 0
     local rolled = 0
+    local shownRolled, shownSteer = 0, 0
     local last = tick()
     local lastOwner = 0
     local lastPrint = 0
+    local lastWheels = 0
+    local toldAnchor = false
+    local spawnedAt = tick()
     while car.Parent do
-      task.wait(0.03)
-      -- (fix) time step from tick(): if task.wait returns nothing in this game, "speed * dt" would
-      -- crash the loop after its first tick and the hull would never move
+      local driving = k.driverSeat.Occupant ~= nil
+      if driving or speed ~= 0 then task.wait(0.03) else task.wait(0.25) end
       local now = tick()
-      local dt = math.min(now - last, 0.2)
+      local dt = math.min(now - last, 0.3)
       last = now
-      if chassis.Anchored then chassis.Anchored = false end
-      -- (fix) keep the physics on the server, so the velocity set below actually takes effect
-      if now - lastOwner >= 0.25 then
+
+      -- if something anchored the vehicle, release every part and say what happened (once)
+      local anchored = false
+      for _, p in ipairs(sentinels) do
+        if p.Anchored then anchored = true end
+      end
+      if anchored then
+        local count = 0
+        for _, p in ipairs(k.parts) do
+          if p.Anchored then
+            p.Anchored = false
+            count = count + 1
+          end
+        end
+        if not toldAnchor then
+          toldAnchor = true
+          print("[Stryker] something anchored " .. count .. " parts, " .. math.floor(now - spawnedAt)
+            .. " s after spawn (model name now: " .. tostring(car.Name) .. "). Released them.")
+        end
+      end
+
+      -- keep the physics on the server, so the velocity set below actually takes effect
+      if now - lastOwner >= 0.5 then
         lastOwner = now
         pcall(function()
           if chassis:GetNetworkOwner() ~= nil then chassis:SetNetworkOwner(nil) end
@@ -680,7 +707,7 @@ local function buildStryker(owner, root, entry)
       end
 
       local throttle, steer = 0, 0
-      if k.driverSeat.Occupant then
+      if driving then
         throttle = k.driverSeat.Throttle
         steer    = k.driverSeat.Steer
       end
@@ -689,6 +716,7 @@ local function buildStryker(owner, root, entry)
       local accel = ACCELERATION
       if throttle == 0 then accel = BRAKE_DECEL end
       speed = speed + (target - speed) * accel
+      if throttle == 0 and math.abs(speed) < 0.05 then speed = 0 end
 
       steerAngle = steerAngle + (-steer * MAX_STEER - steerAngle) * STEER_RATE
       if steer == 0 and math.abs(steerAngle) < 0.005 then steerAngle = 0 end
@@ -700,23 +728,25 @@ local function buildStryker(owner, root, entry)
         chassis.AssemblyAngularVelocity = Vector3.new(0, -steer * TURN_RATE * speedRatio, 0)
       end)
 
-      -- (debug) once a second while someone drives: anchored?, wanted speed, real speed, physics owner
-      if k.driverSeat.Occupant and now - lastPrint >= 1 then
+      -- (debug) every 5 s while someone drives: seconds since spawn, anchored?, wanted speed, real speed
+      if driving and now - lastPrint >= 5 then
         lastPrint = now
         pcall(function()
-          local okO, owner = pcall(function() return chassis:GetNetworkOwner() end)
-          print("[Stryker]", chassis.Anchored, math.floor(speed), math.floor(chassis.AssemblyLinearVelocity.Magnitude),
-            okO and tostring(owner) or "owner?")
+          print("[Stryker] alive " .. math.floor(now - spawnedAt) .. " s", chassis.Anchored, math.floor(speed),
+            math.floor(chassis.AssemblyLinearVelocity.Magnitude))
         end)
       end
 
       if math.abs(speed) > 3 then entry.rampOpen = false end
 
       rolled = rolled + speed * dt
-      for _, w in ipairs(k.wheels) do
+      if now - lastWheels >= 0.1 and (math.abs(rolled - shownRolled) > 0.05 or steerAngle ~= shownSteer) then
+        lastWheels = now
+        shownRolled, shownSteer = rolled, steerAngle
         pcall(function()
-          w.weld.C0 = w.base * CFrame.Angles(0, steerAngle * w.steer, 0)
-            * CFrame.Angles(-rolled / w.radius, 0, 0)
+          for _, w in ipairs(k.wheels) do
+            w.weld.C0 = w.base * CFrame.Angles(0, steerAngle * w.steer, 0) * CFrame.Angles(-rolled / w.radius, 0, 0)
+          end
         end)
       end
     end
@@ -732,7 +762,12 @@ local function buildStryker(owner, root, entry)
       local now = tick()
       local dt = math.min(now - last, 0.2)
       last = now
-      task.wait(0.03)
+      -- full speed only while the ramp moves or someone is on the gun; otherwise four checks a second
+      if k.commanderSeat.Occupant or math.abs(ramp - (entry.rampOpen and 1 or 0)) > 0.001 then
+        task.wait(0.03)
+      else
+        task.wait(0.25)
+      end
 
       -- Ramp animation
       local rampGoal = entry.rampOpen and 1 or 0
@@ -814,6 +849,9 @@ event("chatted", function(data)
 
   if cmd == ":spawn stryker" then
     task.spawn(spawnStryker, player)
+  elseif cmd == ":stryker alive" then
+    print("[Stryker] addon is running. " .. tostring(player) .. " asked.")
+    pcall(announce, "Stryker addon is running.", player)
   elseif cmd == ":cleanup vehicles" then
     for _, entry in pairs(Strykers) do
       pcall(function() entry.car:Destroy() end)
