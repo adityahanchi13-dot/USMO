@@ -3,6 +3,8 @@
 -- this game. Run it as its own persistent addon (turn the Stryker addon off while testing). Chat:
 --   :turret         build the test turret in front of you
 --   :turret report  what worked so far (also printed to the server log)
+--   :turret ping    is the addon still running?
+--   :turret fire    fire once without clicking (tests firing apart from clicking)
 --   :turret clear   remove it
 -- Then: sit in the commander seat, press W/S and A/D (the gun should move), click the gun (it fires).
 -- It fires on ANY click (like the input lab) and separately reports what the Stryker's
@@ -36,6 +38,7 @@ local T = {
   yaw = 0, pitch = 0, recoil = 0, nextBurst = 0,
   ticks = 0, slowestTick = 0, buildTime = 0, parts = 0,
   seen = {}, clicks = 0, shots = 0, lastClick = "none yet", mousedown = "not seen yet",
+  lastFire = "none yet", aimError = "none", lastTick = 0,
 }
 
 local function tell(message, player)
@@ -193,75 +196,80 @@ end
 -- Firing: the Stryker's 5-round burst (muzzle flash, tracer flying on a tween)
 ---------------------------------------------------------------------------------------------
 
-local function linear(t) return TweenInfo.new(t, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, 0, false, 0) end
-
-local function fxPart(name, ball, size, cf, color)
-  local p = Instance.new("Part")
-  p.Name = name
-  if ball then p.Shape = Enum.PartType.Ball end
-  p.Size = size
-  p.CFrame = cf
-  p.Color = color
-  p.Material = MAT.NEON
-  p.Anchored = true
-  p.CanCollide = false
-  p.CanQuery = false
-  p.Parent = T.model
-  pcall(f, p)
-  return p
-end
-
-local function removeLater(p, t)
-  task.spawn(function()
-    task.wait(t)
-    pcall(function() p:Destroy() end)
-  end)
-end
-
-local function fireBurst(shooter)
-  local params = nil
-  pcall(function()
-    params = RaycastParams.new()
-    params.FilterDescendantsInstances = { T.model }
-    params.FilterType = Enum.RaycastFilterType.Exclude
-  end)
-  for round = 1, GUN.BURST do
-    if round > 1 then task.wait(GUN.ROUND_GAP) end
-    if not T.rws then return end
-    local ok, err = pcall(function()
-      local muzzle = T.rws.cradle.CFrame * CFrame.new(0, 0, -GUN.MUZZLE * SCALE)
-      local spread = CFrame.Angles((math.random() - 0.5) * 2 * GUN.SPREAD, (math.random() - 0.5) * 2 * GUN.SPREAD, 0)
-      local dir = (muzzle * spread).LookVector
-      local from = muzzle.Position
-      local flash = fxPart("MuzzleFlash", true, Vector3.new(0.9, 0.9, 0.9), CFrame.new(from + dir * 0.5), COLOR.FLASH)
-      pcall(function()
-        local light = Instance.new("PointLight")
-        light.Color = COLOR.FLASH
-        light.Brightness = 3
-        light.Range = 12
-        light.Parent = flash
-      end)
-      pcall(tween, flash, linear(0.08), { Transparency = 1, Size = flash.Size * 2 })
-      removeLater(flash, 0.13)
-      T.recoil = GUN.RECOIL
-      local to = from + dir * GUN.RANGE
-      local hitOk, hit = pcall(raycast, from, dir * GUN.RANGE, params)
-      if hitOk and hit then to = hit.Position end
-      local dist = (to - from).Magnitude
-      if dist > 0.5 then
-        local flight = math.max(0.03, dist / GUN.TRACER_SPEED)
-        local tracer = fxPart("Tracer", false, Vector3.new(0.18, 0.18, 2.5), CFrame.new(from, from + dir), COLOR.TRACER)
-        pcall(tween, tracer, linear(flight), { CFrame = CFrame.new(to, to + dir) })
-        removeLater(tracer, flight)
-      end
-      T.shots = T.shots + 1
-      if round == 1 then
-        print("[Turret] burst by " .. tostring(shooter) .. ", first round hit "
-          .. (hitOk and hit and tostring(hit.Instance) or "nothing"))
-      end
-    end)
-    if not ok then print("[Turret] round error: " .. tostring(err)) end
+-- One shot, done exactly like the input lab's fireShell (the firing that worked in this game):
+-- a raycast decides where it lands, a shell part flies there on a tween, a small explosion.
+-- Every step is recorded, so a failure says which step it was.
+local function fireShot(shooter, source)
+  local log = {}
+  local function step(name, fn)
+    local ok, err = pcall(fn)
+    table.insert(log, name .. (ok and " ok" or (" FAILED: " .. tostring(err))))
+    return ok
   end
+  if not T.rws then
+    T.lastFire = source .. ": no turret built"
+    return
+  end
+  if tick() < T.nextBurst then return end
+  T.nextBurst = tick() + 0.5
+  local from, dir, hitPos, hitName = nil, nil, nil, "nothing"
+  step("aim", function()
+    local muzzle = T.rws.cradle.CFrame * CFrame.new(0, 0, -GUN.MUZZLE * SCALE)
+    from, dir = muzzle.Position, muzzle.LookVector
+    hitPos = from + dir * 300
+  end)
+  if not from then
+    T.lastFire = source .. ": " .. table.concat(log, ", ")
+    tell("Turret fire " .. T.lastFire, T.owner)
+    return
+  end
+  step("raycast", function()
+    local params = RaycastParams.new()
+    local ignore = { T.model }
+    for _, p in ipairs(built) do table.insert(ignore, p) end
+    params.FilterDescendantsInstances = ignore
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    local hit = raycast(from, dir * 300, params)
+    if hit then
+      hitPos = hit.Position
+      hitName = tostring(hit.Instance)
+    end
+  end)
+  local shell = nil
+  local flight = math.max(0.05, (hitPos - from).Magnitude / 250)
+  step("shell", function()
+    shell = Instance.new("Part")
+    shell.Name = "TestShell"
+    shell.Size = Vector3.new(0.4, 0.4, 1.4)
+    shell.CFrame = CFrame.new(from, from + dir)
+    shell.Color = Color3.new(1, 0.7, 0.3)
+    shell.Material = Enum.Material.Neon
+    shell.Anchored = true
+    shell.CanCollide = false
+    shell.Parent = T.model
+    f(shell)
+  end)
+  step("tween", function()
+    tween(shell, TweenInfo.new(flight, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, 0, false, 0),
+      { CFrame = CFrame.new(hitPos, hitPos + dir) })
+  end)
+  task.spawn(function()
+    task.wait(flight)
+    pcall(function() shell:Destroy() end)
+    pcall(function()
+      local boom = Instance.new("Explosion")
+      boom.Position = hitPos
+      boom.BlastRadius = 3
+      boom.BlastPressure = 0
+      boom.DestroyJointRadiusPercent = 0
+      f(boom)
+    end)
+  end)
+  T.recoil = GUN.RECOIL
+  T.shots = T.shots + 1
+  T.lastFire = source .. " by " .. tostring(shooter) .. ": " .. table.concat(log, ", ") .. "; hit " .. hitName
+    .. " at " .. tostring(math.floor((hitPos - from).Magnitude)) .. " studs"
+  print("[Turret] fire " .. T.lastFire)
   saw("FIRING")
 end
 
@@ -272,19 +280,26 @@ local function seatCheck(name)
   pcall(function() occName = T.seat.Occupant.Parent.Name end)
   pcall(function() dist = (playerPos(name) - T.seat.Position).Magnitude end)
   local wouldFire = occupied and (occName == name or (dist >= 0 and dist <= 10))
-  return string.format("seat occupied %s, occupant name %s, clicker %.1f studs from seat -> Stryker would %s",
-    tostring(occupied), tostring(occName), dist, wouldFire and "FIRE" or "REFUSE")
+  return "seat occupied " .. tostring(occupied) .. ", occupant name " .. tostring(occName) .. ", clicker "
+    .. tostring(math.floor((tonumber(dist) or -1) * 10 + 0.5) / 10) .. " studs from seat -> Stryker would "
+    .. (wouldFire and "FIRE" or "REFUSE")
 end
 
 local function onClick(who, button)
-  local name = nameOf(who)
-  T.clicks = T.clicks + 1
-  T.lastClick = tostring(name) .. " (" .. button .. "): " .. seatCheck(name)
-  print("[Turret] click " .. T.clicks .. ": " .. T.lastClick)
-  saw("CLICKING THE GUN")
-  if tick() < T.nextBurst then return end
-  T.nextBurst = tick() + GUN.BURST * GUN.ROUND_GAP + GUN.COOLDOWN
-  task.spawn(fireBurst, name)
+  local ok, err = pcall(function()
+    local name = nameOf(who)
+    T.clicks = T.clicks + 1
+    local check = "seat check failed"
+    pcall(function() check = seatCheck(name) end)
+    T.lastClick = tostring(name) .. " (" .. button .. "): " .. check
+    print("[Turret] click " .. T.clicks .. ": " .. T.lastClick)
+    saw("CLICKING THE GUN")
+    fireShot(name, "click")
+  end)
+  if not ok then
+    T.lastClick = "CLICK HANDLER ERROR: " .. tostring(err)
+    tell("Turret test: " .. T.lastClick, T.owner)
+  end
 end
 
 ---------------------------------------------------------------------------------------------
@@ -392,9 +407,13 @@ task.spawn(function()
           if seat.Occupant then saw("TURRET MOVING") end
         end
       end)
-      if not ok then print("[Turret] aim loop error: " .. tostring(err)) end
+      if not ok then
+        if T.aimError ~= tostring(err) then tell("Turret test: aim loop error: " .. tostring(err), T.owner) end
+        T.aimError = tostring(err)
+      end
     end
     T.slowestTick = math.max(T.slowestTick, tick() - now)
+    T.lastTick = tick()
   end
 end)
 
@@ -410,9 +429,11 @@ local function report(player)
   end
   local lines = {
     "Turret report: " .. table.concat(worked, ", "),
-    string.format("Built %d parts in %.1f s. Aim loop ran %d ticks (about 30 a second is healthy), slowest tick %.0f ms. Clicks %d, rounds fired %d.",
+    string.format("Built %d parts in %.1f s. Aim loop ran %d ticks (about 30 a second is healthy), slowest tick %.0f ms. Clicks %d, shots %d.",
       T.parts, T.buildTime, T.ticks, T.slowestTick * 1000, T.clicks, T.shots),
     "Last click: " .. T.lastClick,
+    "Last shot: " .. T.lastFire,
+    "Aim loop last ran " .. tostring(math.floor((tick() - T.lastTick) * 10) / 10) .. " s ago, last aim error: " .. T.aimError,
     "mousedown event: " .. T.mousedown,
   }
   for _, line in ipairs(lines) do tell(line, player) end
@@ -436,6 +457,15 @@ event("chatted", function(data)
     task.spawn(build, player)
   elseif command == ":turret report" then
     task.spawn(report, player)
+  elseif command == ":turret ping" then
+    tell("Turret test is alive. Aim loop ticks: " .. T.ticks .. ", last ran "
+      .. tostring(math.floor((tick() - T.lastTick) * 10) / 10) .. " s ago.", player)
+  elseif command == ":turret fire" then
+    task.spawn(function()
+      local ok, err = pcall(fireShot, player, ":turret fire")
+      if not ok then tell("Turret test: :turret fire error: " .. tostring(err), player) end
+      tell("Turret test: " .. T.lastFire, player)
+    end)
   elseif command == ":turret clear" then
     clear()
     tell("Turret test removed.", player)
