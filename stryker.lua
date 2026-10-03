@@ -1,4 +1,4 @@
--- Stryker vehicle for Server Addons, rev 16.
+-- Stryker vehicle for Server Addons, rev 17.
 -- Commands: :spawn stryker, :stryker driver|commander|board, :fire, :vehicles, :cleanup vehicles
 --
 -- Driver seat drives. Commander seat aims the .50 cal (A/D traverse, W/S elevate) and fires
@@ -27,7 +27,7 @@ local DRIVE = {
   WALL_HEIGHTS = { 4.0, 7.5 }, WALL_NORMAL_Y = 0.7, TILT_BLEND = 0.25, FALL_LIMIT = -400,
 }
 local COPY = {
-  PREFIX = "StrykerAddon#", REVISION = 16, name = false, root = false, retired = false,
+  PREFIX = "StrykerAddon#", REVISION = 17, name = false, root = false, retired = false,
   token = false, stamp = 0, world = false,
 }
 
@@ -55,7 +55,7 @@ local GUN = {
   RANGE = 1000, TRAVERSE_SPEED = math.rad(60), ELEVATE_SPEED = math.rad(45), MIN_PITCH = math.rad(-20),
   MAX_PITCH = math.rad(60), BURST = 5, ROUND_GAP = 0.09, COOLDOWN = 0.8, SPREAD = math.rad(0.3), MUZZLE = 4.95,
   RAMP_TIME = 2.0, DOT_EVERY = 0.08, CLICK_RANGE = 80, HIT_RADIUS = 2.5, DAMAGE = 25, TRACER_SPEED = 900,
-  RECOIL = 0.3, SEAT_RADIUS = 4.5, NAG_EVERY = 3,
+  RECOIL = 0.3, SEAT_RADIUS = 4.5, CLICK_SEAT_RANGE = 10, NAG_EVERY = 3,
   -- Click-to-aim: when the commander clicks a spot in the world, the turret swings there at its
   -- normal traverse speed and fires once it lines up. Clicking the turret (or the vehicle)
   -- just fires wherever the gun already points. Set false to make every click only fire.
@@ -578,11 +578,34 @@ end
 
 -- Called straight from the ClickDetector, like the lab's test gun: no flag for another loop
 -- to pick up. Only the player sitting in the commander seat can fire.
+-- Is `name` the commander? Any one of: the seat's occupant has that name, the crew tracker
+-- already knows them as the commander, or they are right at the occupied commander seat.
+local function isCommander(entry, name)
+  local gunSeat = entry.allSeats[2].seat
+  if inSeat(gunSeat, name) then return true, "occupant" end
+  local occupied = false
+  pcall(function() occupied = gunSeat.Occupant ~= nil end)
+  if not occupied then return false, "commander seat empty" end
+  if entry.commander == name then return true, "crew list" end
+  local pos = playerPos(name)
+  local d = math.huge
+  pcall(function() d = (pos - gunSeat.Position).Magnitude end)
+  if d <= GUN.CLICK_SEAT_RANGE then return true, "next to seat" end
+  return false, string.format("%.0f studs from the commander seat", d)
+end
+
 local function gunnerFire(entry, who)
   local name = nameOf(who)
-  if not name or not alive(entry) or not entry.allSeats then return end
-  local gunSeat = entry.allSeats[2].seat
-  if inSeat(gunSeat, name) then
+  if not alive(entry) or not entry.allSeats then return end
+  if not name then
+    entry.lastClick = "click from an unreadable player at " .. string.format("%.0f", tick())
+    print("[Stryker] " .. entry.lastClick)
+    return
+  end
+  local ok, why = isCommander(entry, name)
+  entry.lastClick = name .. (ok and " fired (" or " refused (") .. why .. ")"
+  print("[Stryker] gun click: " .. entry.lastClick)
+  if ok then
     entry.commander = entry.commander or name
     shoot(entry, name)
     return
@@ -1881,7 +1904,7 @@ end
 local function chatControl(player, clickAt)
   for _, entry in pairs(Strykers) do
     local inside = false
-    pcall(function() inside = alive(entry) and inSeat(entry.allSeats[2].seat, player) end)
+    pcall(function() inside = alive(entry) and (isCommander(entry, player)) end)
     if inside then
       local point = toVector3(clickAt)
       if GUN.CLICK_TO_AIM and point and not onVehicle(entry, point) then
@@ -2280,7 +2303,7 @@ local function debugReport(player)
     "Driving: speed " .. string.format("%.1f", e.speed or 0) .. ", on ground " .. tostring(drive.grounded)
       .. ", wall ahead " .. tostring(e.blocked) .. ", chassis anchored " .. tostring(e.chassis and e.chassis.Anchored),
     "Seats: driver " .. seatInfo(1) .. "; commander " .. seatInfo(2) .. "; ramp open " .. tostring(e.rampOpen)
-      .. ", prompts " .. tostring(e.prompts ~= nil),
+      .. ", prompts " .. tostring(e.prompts ~= nil) .. ". Last gun click: " .. tostring(e.lastClick or "none yet"),
   }
   for _, line in ipairs(lines) do
     print("[Stryker] " .. line)
@@ -2325,4 +2348,4 @@ event("chatted", function(data)
 end)
 
 -- Last line of the file. If this message is missing from the server log, the paste was cut off.
-print("[Stryker] rev 16 loaded: full file pasted, ready for :spawn stryker")
+print("[Stryker] rev 17 loaded: full file pasted, ready for :spawn stryker")
