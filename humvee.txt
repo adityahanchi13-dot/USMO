@@ -1,0 +1,561 @@
+-- Humvee addon, SIMPLE version. Detailed model, simple driving, simple turret aiming.
+-- Wheels spin and steer when driving. No combat, no saving, no NPCs, no wrecks.
+-- Commands: :spawn humvee, :cleanup vehicles
+
+local Humvees = {}
+
+-- ===== TUNABLES =====
+local SCALE          = 1.25
+local MAX_SPEED      = 45
+local REVERSE_SPEED  = 20
+local ACCELERATION   = 0.08
+local BRAKE_DECEL    = 0.15
+local TURN_RATE      = 1.2          -- yaw rate at full steer
+local MAX_STEER_DEG  = 28           -- front wheel steer angle, degrees
+local STEER_RATE     = 0.15         -- how fast front wheels reach target steer
+local TRAVERSE_SPEED = math.rad(75)
+local ELEVATE_SPEED  = math.rad(40)
+local MIN_PITCH      = math.rad(-10)
+local MAX_PITCH      = math.rad(30)
+
+-- ===== COLORS =====
+local function rgb(r, g, b) return Color3.new(r/255, g/255, b/255) end
+local COLOR = {
+  TAN = rgb(196, 173, 128),
+  TAN_DARK = rgb(158, 138, 100),
+  INTERIOR = rgb(118, 104, 78),
+  STEEL = rgb(54, 54, 50),
+  BLACK = rgb(28, 28, 26),
+  GUN = rgb(34, 34, 32),
+  RUBBER = rgb(26, 26, 26),
+  GLASS = rgb(44, 60, 56),
+  SEAT = rgb(60, 62, 48),
+  OLIVE = rgb(86, 92, 58),
+  LAMP = rgb(255, 242, 210),
+  AMBER = rgb(255, 150, 30),
+  RED = rgb(210, 30, 24),
+}
+local MAT = {
+  SMOOTH = Enum.Material.SmoothPlastic,
+  METAL = Enum.Material.Metal,
+  RUBBER = Enum.Material.Rubber,
+  GLASS = Enum.Material.Glass,
+  NEON = Enum.Material.Neon,
+  FABRIC = Enum.Material.Fabric,
+}
+local CYL = Enum.PartType.Cylinder
+
+-- ===== DIMENSIONS =====
+local DIM = {
+  SIDE_X = 3.65, WHEEL_X = 3.05, WHEEL_R = 1.6,
+  FRONT_AXLE = -5.5, REAR_AXLE = 5.5,
+  ARCH_HALF = 1.8, ARCH_TOP = 3.75, CHAMFER = 0.65,
+  CHASSIS_Y = 1.75, CHASSIS_Z = 0.2, SEAT_Y = 2.53,
+  TURRET_Z = 1.3, RING_TOP = 6.65, PIVOT_Y = 6.4,
+  GUN_Y = 7.78, GUN_PIVOT_Z = 0.5,
+  GUNNER_Y = 5.0, GUNNER_Z = 2.35,
+}
+
+-- ===== CFrame helpers =====
+local function rx(deg) return CFrame.Angles(math.rad(deg), 0, 0) end
+local function ry(deg) return CFrame.Angles(0, math.rad(deg), 0) end
+local function rz(deg) return CFrame.Angles(0, 0, math.rad(deg)) end
+
+-- ===== Weld helpers =====
+local function weldConstraint(part0, part1)
+  local w = Instance.new("WeldConstraint")
+  w.Part0 = part0
+  w.Part1 = part1
+  w.Parent = part0
+  return w
+end
+
+local function weld(part0, part1, c0)
+  local w = Instance.new("Weld")
+  w.Part0 = part0
+  w.Part1 = part1
+  w.C0 = c0 or CFrame.new()
+  w.C1 = CFrame.new()
+  w.Parent = part0
+  return w
+end
+
+-- ===== Build kit =====
+local function newKit(model, root)
+  local k = { parts = {}, wheels = {} }
+  function k.at(x, y, z) return root * CFrame.new(x*SCALE, y*SCALE, z*SCALE) end
+  function k.off(x, y, z) return CFrame.new(x*SCALE, y*SCALE, z*SCALE) end
+  function k.make(class, name, size, cf, color, material, weldTo, shape)
+    local p = Instance.new(class)
+    p.Name = name
+    if shape then p.Shape = shape end
+    p.Size = size * SCALE
+    p.CFrame = cf
+    p.Color = color
+    p.Material = material
+    p.Anchored = true
+    p.CanCollide = false
+    p.CanTouch = false
+    p.Massless = true
+    p.Parent = model
+    f(p)
+    if weldTo then weldConstraint(weldTo, p) end
+    table.insert(k.parts, p)
+    return p
+  end
+  function k.block(name, sx, sy, sz, cf, color, material, weldTo)
+    return k.make("Part", name, Vector3.new(sx, sy, sz), cf, color, material, weldTo, false)
+  end
+  function k.wedge(name, sx, sy, sz, cf, color, material, weldTo)
+    return k.make("WedgePart", name, Vector3.new(sx, sy, sz), cf, color, material, weldTo, false)
+  end
+  function k.cylinder(name, length, diameter, cf, color, material, weldTo)
+    return k.make("Part", name, Vector3.new(length, diameter, diameter), cf, color, material, weldTo, CYL)
+  end
+  function k.glass(name, sx, sy, sz, cf, weldTo)
+    local p = k.make("Part", name, Vector3.new(sx, sy, sz), cf, COLOR.GLASS, MAT.GLASS, weldTo, false)
+    p.Transparency = 0.4
+    return p
+  end
+  function k.seat(class, name, cf, weldTo)
+    local s = k.make(class, name, Vector3.new(1.5, 0.4, 1.4), cf, COLOR.SEAT, MAT.FABRIC, weldTo, false)
+    s.CanCollide = true
+    s.CanTouch = true
+    return s
+  end
+  return k
+end
+
+-- ===== Seat prompt =====
+local function addSeatPrompt(seat)
+  local ok = pcall(function()
+    local prompt = Instance.new("ProximityPrompt")
+    prompt.Name = "SitPrompt"
+    prompt.ActionText = "Sit"
+    prompt.ObjectText = seat.Name
+    prompt.KeyboardKeyCode = Enum.KeyCode.E
+    prompt.HoldDuration = 0
+    prompt.MaxActivationDistance = 8
+    prompt.RequiresLineOfSight = false
+    prompt.Parent = seat
+    prompt.Triggered:Connect(function(who)
+      if seat.Occupant then return end
+      pcall(function()
+        local char = who.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then seat:Sit(hum) end
+      end)
+    end)
+  end)
+  return ok
+end
+
+-- ===== BUILD THE HUMVEE =====
+local function buildHumvee(owner, root, entry)
+  local car = Instance.new("Model")
+  car.Name = owner .. "_Humvee"
+  f(car)
+  entry.car = car -- (fix) known straight away, so a failed build is cleaned up instead of left in the map
+
+  local k = newKit(car, root)
+  local at, off = k.at, k.off
+
+  -- Chassis: the only physical collider with mass. Everything else follows it.
+  local chassis = k.make("Part", "Chassis", Vector3.new(4.2, 0.9, 14.6),
+    at(0, DIM.CHASSIS_Y, DIM.CHASSIS_Z), COLOR.STEEL, MAT.METAL, false, false)
+  chassis.Massless = false
+  chassis.CanCollide = true
+
+  -- ===== FLOOR / BAYS =====
+  k.block("FloorPan", 7.3, 0.25, 11.0, at(0, 2.1, 0.9), COLOR.STEEL, MAT.METAL, chassis)
+  k.block("EngineBay", 4.3, 1.9, 4.4, at(0, 2.85, -5.0), COLOR.BLACK, MAT.METAL, chassis)
+  k.block("RearBay", 4.3, 1.4, 3.6, at(0, 2.6, 5.8), COLOR.BLACK, MAT.METAL, chassis)
+
+  -- Differentials + half-shafts + wheel wells
+  for _, axleZ in ipairs({ DIM.FRONT_AXLE, DIM.REAR_AXLE }) do
+    k.block("Differential", 2.0, 0.8, 1.4, at(0, 1.45, axleZ), COLOR.STEEL, MAT.METAL, chassis)
+    for _, s in ipairs({ -1, 1 }) do
+      k.cylinder("HalfShaft", 1.7, 0.32, at(s * 1.75, 1.9, axleZ), COLOR.STEEL, MAT.METAL, chassis)
+      k.block("LowerArm", 1.6, 0.16, 0.9, at(s * 1.8, 1.25, axleZ + 0.1), COLOR.STEEL, MAT.METAL, chassis)
+      k.block("WheelWellInner", 0.15, 2.5, 2 * DIM.ARCH_HALF, at(s * 2.2, 2.75, axleZ), COLOR.BLACK, MAT.SMOOTH, chassis)
+      k.block("WheelWellTop", 1.5, 0.12, 2 * DIM.ARCH_HALF, at(s * 2.95, DIM.ARCH_TOP + 0.06, axleZ), COLOR.BLACK, MAT.SMOOTH, chassis)
+    end
+  end
+
+  -- ===== WHEELS (animatable Welds so they spin + steer) =====
+  local iceFriction = PhysicalProperties.new(0, 0, 0, 0, 0)
+  local wheelOffsets = {
+    FL = { x = -DIM.WHEEL_X, z = DIM.FRONT_AXLE, front = true },
+    FR = { x =  DIM.WHEEL_X, z = DIM.FRONT_AXLE, front = true },
+    RL = { x = -DIM.WHEEL_X, z = DIM.REAR_AXLE,  front = false },
+    RR = { x =  DIM.WHEEL_X, z = DIM.REAR_AXLE,  front = false },
+  }
+  for name, wo in pairs(wheelOffsets) do
+    local s = (wo.x < 0) and -1 or 1
+    local wheel = k.make("Part", "Wheel_" .. name,
+      Vector3.new(1.3, DIM.WHEEL_R * 2, DIM.WHEEL_R * 2),
+      at(wo.x, DIM.WHEEL_R, wo.z), COLOR.RUBBER, MAT.RUBBER, false, CYL)
+    wheel.CanCollide = true
+    wheel.Massless = false
+    wheel.CustomPhysicalProperties = iceFriction
+    -- detail parts weld to the wheel and follow it (they use WeldConstraint)
+    k.cylinder("Rim_" .. name, 0.2, 2.0, at(wo.x + s * 0.62, DIM.WHEEL_R, wo.z), COLOR.TAN, MAT.SMOOTH, wheel)
+    k.cylinder("Hub_" .. name, 0.3, 0.85, at(wo.x + s * 0.72, DIM.WHEEL_R, wo.z), COLOR.TAN_DARK, MAT.METAL, wheel)
+    for lug = 0, 7 do
+      local a = lug * math.pi / 4
+      k.cylinder("LugNut", 0.12, 0.13,
+        at(wo.x + s * 0.78, DIM.WHEEL_R + 0.62 * math.cos(a), wo.z + 0.62 * math.sin(a)),
+        COLOR.STEEL, MAT.METAL, wheel)
+    end
+    -- Animatable Weld from chassis to wheel.
+    local baseC0 = off(wo.x, DIM.WHEEL_R - DIM.CHASSIS_Y, wo.z - DIM.CHASSIS_Z)
+    local wheelWeld = weld(chassis, wheel, baseC0)
+    table.insert(k.wheels, {
+      weld = wheelWeld,
+      base = baseC0,
+      front = wo.front,
+      radius = DIM.WHEEL_R * SCALE,   -- actual stud radius
+    })
+  end
+
+  -- ===== SIDE BODY =====
+  for _, s in ipairs({ -1, 1 }) do
+    local x = s * DIM.SIDE_X
+    k.block("FrontFender", 0.3, 0.2, 3.25, at(x, 3.85, -5.325), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("CowlSide", 0.3, 2.3, 1.4, at(x, 3.15, -3.0), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("DoorPanel", 0.3, 2.55, 6.0, at(x, 3.275, 0.7), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("RearQuarter", 0.3, 1.05, 3.6, at(x, 4.275, 5.5), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("RearCorner", 0.3, 2.8, 0.7, at(x, 3.4, 7.65), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("Rocker", 0.36, 0.22, 7.4, at(s * 3.7, 2.09, 0), COLOR.BLACK, MAT.METAL, chassis)
+    local chamferY = DIM.ARCH_TOP - DIM.CHAMFER / 2
+    k.wedge("ArchChamfer", 0.3, DIM.CHAMFER, DIM.CHAMFER,
+      at(x, chamferY, DIM.FRONT_AXLE + DIM.ARCH_HALF - DIM.CHAMFER / 2) * rz(180), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.wedge("ArchChamfer", 0.3, DIM.CHAMFER, DIM.CHAMFER,
+      at(x, chamferY, DIM.REAR_AXLE - DIM.ARCH_HALF + DIM.CHAMFER / 2) * rx(180), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.wedge("ArchChamfer", 0.3, DIM.CHAMFER, DIM.CHAMFER,
+      at(x, chamferY, DIM.REAR_AXLE + DIM.ARCH_HALF - DIM.CHAMFER / 2) * rz(180), COLOR.TAN, MAT.SMOOTH, chassis)
+    for _, seamZ in ipairs({ -2.3, 0.75 }) do
+      k.block("DoorSeam", 0.04, 2.55, 0.06, at(s * 3.815, 3.275, seamZ), COLOR.BLACK, MAT.SMOOTH, chassis)
+      k.block("Hinge", 0.1, 0.32, 0.22, at(s * 3.84, 2.75, seamZ + 0.16), COLOR.STEEL, MAT.METAL, chassis)
+      k.block("Hinge", 0.1, 0.32, 0.22, at(s * 3.84, 3.95, seamZ + 0.16), COLOR.STEEL, MAT.METAL, chassis)
+    end
+    k.block("DoorHandle", 0.08, 0.14, 0.45, at(s * 3.84, 4.2, 0.25), COLOR.BLACK, MAT.METAL, chassis)
+    k.block("DoorHandle", 0.08, 0.14, 0.45, at(s * 3.84, 4.2, 3.15), COLOR.BLACK, MAT.METAL, chassis)
+    k.block("MirrorArm", 0.35, 0.08, 0.08, at(s * 3.97, 4.75, -2.05), COLOR.BLACK, MAT.METAL, chassis)
+    k.block("MirrorArm", 0.35, 0.08, 0.08, at(s * 3.97, 5.45, -2.05), COLOR.BLACK, MAT.METAL, chassis)
+    k.block("Mirror", 0.8, 1.15, 0.14, at(s * 4.4, 5.1, -2.05), COLOR.BLACK, MAT.METAL, chassis)
+    k.block("MirrorGlass", 0.66, 1.0, 0.03, at(s * 4.4, 5.1, -1.97), COLOR.GLASS, MAT.GLASS, chassis)
+  end
+
+  -- ===== FRONT =====
+  local nose = at(0, 3.225, -7.285) * rx(25)
+  k.block("Nose", 7.6, 1.6, 0.3, nose, COLOR.TAN, MAT.SMOOTH, chassis)
+  k.block("GrilleSurround", 2.5, 1.15, 0.06, nose * off(0, 0.12, -0.17), COLOR.TAN_DARK, MAT.SMOOTH, chassis)
+  for i = -3, 3 do
+    k.block("GrilleSlot", 0.14, 0.95, 0.05, nose * off(i * 0.32, 0.12, -0.2), COLOR.BLACK, MAT.SMOOTH, chassis)
+  end
+  for _, s in ipairs({ -1, 1 }) do
+    k.block("HeadlightBezel", 0.95, 0.85, 0.06, nose * off(s * 1.85, 0.05, -0.17), COLOR.BLACK, MAT.SMOOTH, chassis)
+    k.cylinder("Headlight", 0.08, 0.62, nose * off(s * 1.85, 0.05, -0.22) * ry(90), COLOR.LAMP, MAT.NEON, chassis)
+    k.block("FenderLightHousing", 0.7, 0.6, 0.06, nose * off(s * 3.05, -0.1, -0.17), COLOR.BLACK, MAT.SMOOTH, chassis)
+    k.block("MarkerLight", 0.42, 0.18, 0.05, nose * off(s * 3.05, 0.05, -0.2), COLOR.AMBER, MAT.NEON, chassis)
+    k.block("BlackoutLight", 0.42, 0.14, 0.05, nose * off(s * 3.05, -0.22, -0.2), COLOR.LAMP, MAT.SMOOTH, chassis)
+    k.block("HoodLatch", 0.3, 0.14, 0.26, nose * off(s * 3.1, 0.72, -0.17), COLOR.BLACK, MAT.METAL, chassis)
+    k.block("TowShackle", 0.2, 0.45, 0.32, at(s * 2.3, 2.05, -8.25), COLOR.STEEL, MAT.METAL, chassis)
+  end
+  k.block("FrontBumper", 7.8, 0.72, 0.55, at(0, 2.14, -7.85), COLOR.TAN_DARK, MAT.METAL, chassis)
+  local hood = at(0, 3.95, -4.635) * rx(-4.3)
+  k.block("Hood", 7.6, 0.35, 4.72, hood, COLOR.TAN, MAT.SMOOTH, chassis)
+  k.block("HoodCrown", 3.6, 0.12, 4.0, hood * off(0, 0.23, 0.1), COLOR.TAN, MAT.SMOOTH, chassis)
+  k.block("CowlVent", 6.6, 0.1, 0.35, at(0, 4.33, -2.5), COLOR.BLACK, MAT.SMOOTH, chassis)
+  k.block("AirIntake", 0.5, 0.95, 0.65, at(3.0, 4.72, -2.75), COLOR.BLACK, MAT.METAL, chassis)
+
+  -- ===== CABIN =====
+  local screen = at(0, 5.175, -2.075) * rx(14.4)
+  for _, s in ipairs({ -1, 1 }) do
+    k.block("APillar", 0.5, 1.95, 0.35, screen * off(s * 3.55, 0, 0), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.glass("Windshield", 3.1, 1.5, 0.08, screen * off(s * 1.72, 0, 0.05), chassis)
+  end
+  k.block("WindshieldDivider", 0.26, 1.85, 0.3, screen, COLOR.TAN, MAT.SMOOTH, chassis)
+  k.block("WindshieldTop", 7.6, 0.25, 0.35, screen * off(0, 0.86, 0), COLOR.TAN, MAT.SMOOTH, chassis)
+  k.block("WindshieldBottom", 7.6, 0.2, 0.35, screen * off(0, -0.86, 0), COLOR.TAN, MAT.SMOOTH, chassis)
+  for _, s in ipairs({ -1, 1 }) do
+    local x = s * DIM.SIDE_X
+    k.block("FrontWindowPost", 0.3, 1.3, 0.45, at(x, 5.2, -1.85), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("BPillar", 0.3, 1.3, 0.5, at(x, 5.2, 0.75), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("CPillar", 0.3, 1.3, 0.9, at(x, 5.2, 4.0), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("WindowSill", 0.3, 0.2, 5.175, at(x, 4.65, 0.9625), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("WindowHeader", 0.3, 0.1, 5.175, at(x, 5.8, 0.9625), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("WindowFrame", 0.3, 1.0, 0.7, at(x, 5.25, 0.15), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("WindowFrame", 0.3, 1.0, 0.55, at(x, 5.25, 1.275), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.block("WindowFrame", 0.3, 1.0, 0.5, at(x, 5.25, 3.3), COLOR.TAN, MAT.SMOOTH, chassis)
+    k.glass("SideGlass", 0.08, 1.0, 1.425, at(s * 3.6, 5.25, -0.9125), chassis)
+    k.glass("SideGlass", 0.08, 1.0, 1.5, at(s * 3.6, 5.25, 2.3), chassis)
+  end
+  k.block("Roof", 7.7, 0.45, 6.4, at(0, 6.075, 1.25), COLOR.TAN, MAT.SMOOTH, chassis)
+
+  -- ===== REAR =====
+  k.wedge("RearSlope", 7.7, 1.5, 3.4, at(0, 5.55, 6.15) * ry(180), COLOR.TAN, MAT.SMOOTH, chassis)
+  k.block("Tailgate", 7.6, 2.8, 0.3, at(0, 3.4, 7.85), COLOR.TAN, MAT.SMOOTH, chassis)
+  k.block("TailgateSeam", 7.0, 0.05, 0.04, at(0, 4.5, 8.01), COLOR.BLACK, MAT.SMOOTH, chassis)
+  k.block("RearBumper", 7.8, 0.6, 0.45, at(0, 2.1, 8.2), COLOR.TAN_DARK, MAT.METAL, chassis)
+  k.block("TowPintle", 0.45, 0.4, 0.35, at(0, 2.0, 8.55), COLOR.STEEL, MAT.METAL, chassis)
+  for _, s in ipairs({ -1, 1 }) do
+    k.block("TaillightHousing", 0.75, 0.6, 0.08, at(s * 3.05, 3.55, 8.03), COLOR.BLACK, MAT.SMOOTH, chassis)
+    k.block("Taillight", 0.5, 0.2, 0.05, at(s * 3.05, 3.68, 8.07), COLOR.RED, MAT.NEON, chassis)
+    k.block("RearIndicator", 0.5, 0.14, 0.05, at(s * 3.05, 3.42, 8.07), COLOR.AMBER, MAT.NEON, chassis)
+    local antennaLength = 4.5
+    if s > 0 then antennaLength = 6 end
+    k.cylinder("AntennaBase", 0.3, 0.32, at(s * 3.3, 5.15, 7.2) * rz(90), COLOR.BLACK, MAT.METAL, chassis)
+    k.cylinder("Antenna", antennaLength, 0.07, at(s * 3.3, 5.3 + antennaLength / 2, 7.2) * rz(90), COLOR.BLACK, MAT.METAL, chassis)
+  end
+
+  -- ===== INTERIOR =====
+  k.block("CabinFloor", 7.0, 0.2, 6.0, at(0, 2.35, 0.7), COLOR.INTERIOR, MAT.SMOOTH, chassis)
+  k.block("CenterTunnel", 1.5, 1.1, 5.4, at(0, 2.95, 0.6), COLOR.INTERIOR, MAT.SMOOTH, chassis)
+  k.block("Dashboard", 7.0, 0.7, 0.6, at(0, 4.0, -1.85), COLOR.INTERIOR, MAT.SMOOTH, chassis)
+  k.cylinder("SteeringWheel", 0.08, 0.9, at(-1.6, 4.3, -1.3) * rx(-35) * ry(90), COLOR.BLACK, MAT.SMOOTH, chassis)
+
+  -- ===== SEATS =====
+  local driverSeat = k.seat("VehicleSeat", "DriverSeat", at(-1.6, DIM.SEAT_Y, -0.35), chassis)
+  driverSeat.MaxSpeed = 0
+  driverSeat.Torque = 0
+  driverSeat.TurnSpeed = 0
+  driverSeat.HeadsUpDisplay = false
+  local seats = { driverSeat }
+  table.insert(seats, k.seat("Seat", "PassengerSeat", at(1.6, DIM.SEAT_Y, -0.35), chassis))
+  table.insert(seats, k.seat("Seat", "RearSeatLeft", at(-1.6, DIM.SEAT_Y, 2.45), chassis))
+  table.insert(seats, k.seat("Seat", "RearSeatRight", at(1.6, DIM.SEAT_Y, 2.45), chassis))
+  for _, spot in ipairs({ { -1.6, -0.35 }, { 1.6, -0.35 }, { -1.6, 2.45 }, { 1.6, 2.45 } }) do
+    k.block("SeatBack", 1.5, 1.6, 0.3, at(spot[1], DIM.SEAT_Y + 0.95, spot[2] + 0.75) * rx(10), COLOR.SEAT, MAT.FABRIC, chassis)
+  end
+
+  -- ===== TURRET PIVOT + GUN PIVOT (animatable Welds) =====
+  local turretPivot = k.make("Part", "TurretPivot", Vector3.new(0.4, 0.2, 0.4),
+    at(0, DIM.PIVOT_Y, DIM.TURRET_Z), COLOR.BLACK, MAT.SMOOTH, false, false)
+  turretPivot.Transparency = 1
+  local turretBase = off(0, DIM.PIVOT_Y - DIM.CHASSIS_Y, DIM.TURRET_Z - DIM.CHASSIS_Z)
+  local turretWeld = weld(chassis, turretPivot, turretBase)
+
+  local gunPivot = k.make("Part", "GunPivot", Vector3.new(0.3, 0.3, 0.3),
+    at(0, DIM.GUN_Y, DIM.GUN_PIVOT_Z), COLOR.BLACK, MAT.SMOOTH, false, false)
+  gunPivot.Transparency = 1
+  local elevationBase = off(0, DIM.GUN_Y - DIM.PIVOT_Y, DIM.GUN_PIVOT_Z - DIM.TURRET_Z)
+  local elevationWeld = weld(turretPivot, gunPivot, elevationBase)
+
+  -- ===== TURRET DETAIL =====
+  k.cylinder("TurretRing", 0.35, 3.3, at(0, 6.475, DIM.TURRET_Z) * rz(90), COLOR.TAN_DARK, MAT.METAL, turretPivot)
+  k.cylinder("TurretHatch", 0.4, 2.8, at(0, 6.475, DIM.TURRET_Z) * rz(90), COLOR.BLACK, MAT.SMOOTH, turretPivot)
+  local shieldZ = DIM.TURRET_Z - 1.55
+  k.block("ShieldLeft", 1.15, 2.0, 0.15, at(-0.925, DIM.RING_TOP + 1.0, shieldZ), COLOR.TAN, MAT.SMOOTH, turretPivot)
+  k.block("ShieldRight", 1.15, 2.0, 0.15, at(0.925, DIM.RING_TOP + 1.0, shieldZ), COLOR.TAN, MAT.SMOOTH, turretPivot)
+  k.block("ShieldCenter", 0.7, 0.95, 0.15, at(0, DIM.RING_TOP + 0.475, shieldZ), COLOR.TAN, MAT.SMOOTH, turretPivot)
+  k.block("ShieldBridge", 0.7, 0.35, 0.15, at(0, DIM.RING_TOP + 1.825, shieldZ), COLOR.TAN, MAT.SMOOTH, turretPivot)
+  for _, s in ipairs({ -1, 1 }) do
+    k.block("ShieldWing", 1.3, 1.8, 0.15, at(s * 1.96, DIM.RING_TOP + 0.9, shieldZ + 0.46) * ry(-45 * s), COLOR.TAN, MAT.SMOOTH, turretPivot)
+  end
+  k.cylinder("Pintle", 0.9, 0.28, at(0, DIM.RING_TOP + 0.45, DIM.TURRET_Z - 0.2) * rz(90), COLOR.STEEL, MAT.METAL, turretPivot)
+
+  local gunnerSeat = k.seat("VehicleSeat", "GunnerSeat", at(0, DIM.GUNNER_Y, DIM.GUNNER_Z), turretPivot)
+  gunnerSeat.MaxSpeed = 0
+  gunnerSeat.Torque = 0
+  gunnerSeat.TurnSpeed = 0
+  gunnerSeat.HeadsUpDisplay = false
+  table.insert(seats, gunnerSeat)
+
+  -- ===== GUN DETAIL (welded to gunPivot) =====
+  k.block("Cradle", 0.5, 0.2, 0.7, at(0, 7.45, 0.95), COLOR.STEEL, MAT.METAL, gunPivot)
+  k.block("Receiver", 0.42, 0.5, 1.6, at(0, DIM.GUN_Y, 0.9), COLOR.GUN, MAT.METAL, gunPivot)
+  k.block("FeedCover", 0.44, 0.1, 1.1, at(0, DIM.GUN_Y + 0.3, 0.7), COLOR.STEEL, MAT.METAL, gunPivot)
+  k.cylinder("BarrelJacket", 0.7, 0.32, at(0, DIM.GUN_Y, -0.25) * ry(90), COLOR.GUN, MAT.METAL, gunPivot)
+  k.cylinder("Barrel", 3.0, 0.17, at(0, DIM.GUN_Y, -2.1) * ry(90), COLOR.GUN, MAT.METAL, gunPivot)
+  k.cylinder("FlashHider", 0.3, 0.24, at(0, DIM.GUN_Y, -3.6) * ry(90), COLOR.GUN, MAT.METAL, gunPivot)
+  k.block("GripPlate", 0.42, 0.34, 0.08, at(0, DIM.GUN_Y, 1.74), COLOR.GUN, MAT.METAL, gunPivot)
+  for _, s in ipairs({ -1, 1 }) do
+    k.cylinder("SpadeGrip", 0.35, 0.12, at(s * 0.14, DIM.GUN_Y - 0.05, 1.9) * rz(90), COLOR.GUN, MAT.METAL, gunPivot)
+  end
+  k.block("AmmoCan", 0.45, 0.6, 0.95, at(-0.5, DIM.GUN_Y - 0.1, 0.85), COLOR.OLIVE, MAT.METAL, gunPivot)
+
+  -- ===== UNANCHOR EVERYTHING =====
+  for _, p in ipairs(k.parts) do
+    p.Anchored = false
+  end
+  turretPivot.Anchored = false
+  gunPivot.Anchored = false
+
+  -- Seat prompts. (fix) Uses this Humvee's own seat variables, never a search by name, so a seat
+  -- called "DriverSeat" in another vehicle can never be picked up by mistake.
+  for _, s in ipairs(seats) do addSeatPrompt(s) end
+
+  -- (fix) Roblox puts a vehicle that sits still "to sleep", and a sleeping vehicle can ignore the
+  -- velocity the drive loop sets, so it feels locked after you get out and back in. When someone gets
+  -- in, it is lifted 0.05 studs, which wakes it. Only a CFrame nudge, no push, at most once every 2 s.
+  local lastWake = 0
+  local function wake()
+    if tick() - lastWake < 2 then return end
+    lastWake = tick()
+    pcall(function() chassis.CFrame = chassis.CFrame + Vector3.new(0, 0.05, 0) end)
+  end
+
+  -- ===== DRIVE LOOP (simple) =====
+  task.spawn(function()
+    local speed = 0
+    local steerAngle = 0        -- current front-wheel steer in radians
+    local spinAccum = 0         -- accumulated wheel roll in radians
+    local shownSpin, shownSteer = 0, 0
+    local last = tick()
+    local wasManned = false
+
+    while car.Parent do
+      local driving = driverSeat.Occupant ~= nil
+      -- (fix) full speed only while driven or still rolling; four checks a second when parked
+      if driving or speed ~= 0 or steerAngle ~= 0 then task.wait(0.03) else task.wait(0.25) end
+      -- (fix) time step from tick(): if task.wait returns nothing in this game, "speed * dt" crashed
+      -- the loop on its first tick (the same bug the Stryker had)
+      local now = tick()
+      local dt = math.min(now - last, 0.3)
+      last = now
+
+      local manned = driving or gunnerSeat.Occupant ~= nil
+      if manned and not wasManned then wake() end
+      wasManned = manned
+
+      -- Read input
+      if driving then
+        local throttle = driverSeat.Throttle
+        local steer    = driverSeat.Steer
+
+        local targetSpeed = throttle * MAX_SPEED
+        if throttle < 0 then targetSpeed = throttle * REVERSE_SPEED end
+        speed = speed + (targetSpeed - speed) * ACCELERATION
+        if throttle == 0 and math.abs(speed) < 0.05 then speed = 0 end
+
+        local targetSteer = -steer * math.rad(MAX_STEER_DEG)
+        steerAngle = steerAngle + (targetSteer - steerAngle) * STEER_RATE
+        if steer == 0 and math.abs(steerAngle) < 0.005 then steerAngle = 0 end
+      else
+        speed = speed * (1 - BRAKE_DECEL)
+        if math.abs(speed) < 0.05 then speed = 0 end
+        steerAngle = steerAngle * 0.7
+        if math.abs(steerAngle) < 0.005 then steerAngle = 0 end
+      end
+
+      -- Apply to chassis
+      pcall(function()
+        chassis.AssemblyLinearVelocity =
+          chassis.CFrame.LookVector * speed + Vector3.new(0, chassis.AssemblyLinearVelocity.Y, 0)
+        local speedRatio = math.clamp(math.abs(speed) / MAX_SPEED, 0.05, 1)
+        local steerInput = 0
+        if driving then steerInput = driverSeat.Steer end
+        chassis.AssemblyAngularVelocity = Vector3.new(0, -steerInput * TURN_RATE * speedRatio, 0)
+      end)
+
+      -- Wheel roll: distance traveled divided by radius gives radians.
+      spinAccum = spinAccum - (speed * dt) / (DIM.WHEEL_R * SCALE)
+
+      -- Update each wheel (front wheels steer, all wheels spin), only when something changed
+      if math.abs(spinAccum - shownSpin) > 0.02 or steerAngle ~= shownSteer then
+        shownSpin, shownSteer = spinAccum, steerAngle
+        pcall(function()
+          for _, w in ipairs(k.wheels) do
+            if w.front then
+              w.weld.C0 = w.base * CFrame.Angles(0, steerAngle, 0) * CFrame.Angles(spinAccum, 0, 0)
+            else
+              w.weld.C0 = w.base * CFrame.Angles(spinAccum, 0, 0)
+            end
+          end
+        end)
+      end
+    end
+  end)
+
+  -- ===== TURRET LOOP (simple) =====
+  task.spawn(function()
+    local yaw = 0
+    local pitch = 0
+    local last = tick()
+    while car.Parent do
+      -- (fix) four checks a second while nobody is on the gun
+      if gunnerSeat.Occupant then task.wait(0.03) else task.wait(0.25) end
+      local now = tick()
+      local dt = math.min(now - last, 0.1) -- (fix) real time step, so aiming speed doesn't change with lag
+      last = now
+      if gunnerSeat.Occupant then
+        local throttle = gunnerSeat.Throttle
+        local steer    = gunnerSeat.Steer
+        if steer ~= 0 or throttle ~= 0 then
+          yaw   = (yaw - steer * TRAVERSE_SPEED * dt + math.pi) % (2 * math.pi) - math.pi
+          pitch = math.clamp(pitch + throttle * ELEVATE_SPEED * dt, MIN_PITCH, MAX_PITCH)
+          pcall(function()
+            turretWeld.C0 = turretBase * CFrame.Angles(0, yaw, 0)
+            elevationWeld.C0 = elevationBase * CFrame.Angles(pitch, 0, 0)
+          end)
+        end
+      end
+    end
+  end)
+
+  entry.car = car
+  entry.chassis = chassis
+  entry.driverSeat = driverSeat
+  entry.gunnerSeat = gunnerSeat
+  return true
+end
+
+-- ===== SPAWN / DESTROY =====
+local function destroyHumvee(player)
+  if Humvees[player] then
+    pcall(function() Humvees[player].car:Destroy() end)
+    Humvees[player] = nil
+  end
+end
+
+local function spawnHumvee(player)
+  destroyHumvee(player)
+  local cf = getPlayerPosition(player)
+  if not cf then return end
+  if typeof(cf) == "Vector3" then cf = CFrame.new(cf) end
+
+  local feetY = cf.Position.Y - 3
+  local forward = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
+  if forward.Magnitude < 0.1 then forward = Vector3.new(0, 0, -1) end
+  forward = forward.Unit
+
+  local spawnPos = Vector3.new(cf.Position.X, feetY, cf.Position.Z) + forward * 22
+  local root = CFrame.new(spawnPos + Vector3.new(0, 2, 0), spawnPos + Vector3.new(0, 2, 0) + forward)
+
+  local entry = {}
+  Humvees[player] = entry
+
+  local ok, err = pcall(buildHumvee, player, root, entry)
+  if not ok then
+    print("[Humvee] build failed: " .. tostring(err))
+    pcall(function() entry.car:Destroy() end)
+    Humvees[player] = nil
+    return
+  end
+
+  local drop = root * CFrame.new(-1.6 * SCALE, DIM.SEAT_Y * SCALE + 3, -0.35 * SCALE)
+  pcall(setPlayerPosition, player, drop)
+  pcall(announce, player .. " deployed a Humvee. Driver: W/S + A/D. Press E on a seat to sit; the turret seat runs the gun.", player)
+end
+
+-- ===== COMMANDS =====
+event("chatted", function(data)
+  local player = data.Value[1]
+  local message = data.Value[2]
+  if not player or not message then return end
+  local cmd = string.match(string.lower(message), "^%s*(.-)%s*$")
+
+  if cmd == ":spawn humvee" then
+    task.spawn(spawnHumvee, player)
+  elseif cmd == ":cleanup vehicles" then
+    for _, entry in pairs(Humvees) do
+      pcall(function() entry.car:Destroy() end)
+    end
+    Humvees = {}
+    pcall(announce, "All Humvees removed.", player)
+  end
+end)
+
+print("[Humvee] simple version loaded. :spawn humvee to build one.")
