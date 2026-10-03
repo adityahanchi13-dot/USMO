@@ -1,4 +1,4 @@
--- Stryker vehicle for Server Addons, rev 13.
+-- Stryker vehicle for Server Addons, rev 14.
 -- Commands: :spawn stryker, :stryker driver|commander|board, :fire, :vehicles, :cleanup vehicles
 --
 -- Driver seat drives. Commander seat aims the .50 cal (A/D traverse, W/S elevate) and fires
@@ -27,7 +27,7 @@ local DRIVE = {
   WALL_HEIGHTS = { 4.0, 7.5 }, WALL_NORMAL_Y = 0.7, TILT_BLEND = 0.25, FALL_LIMIT = -400,
 }
 local COPY = {
-  PREFIX = "StrykerAddon#", REVISION = 13, name = false, root = false, retired = false,
+  PREFIX = "StrykerAddon#", REVISION = 14, name = false, root = false, retired = false,
   token = false, stamp = 0, world = false,
 }
 
@@ -202,6 +202,16 @@ local function destroyEntry(entry)
   pcall(function() entry.car:Destroy() end)
   for _, p in ipairs(entry.parts or {}) do
     pcall(function() if p.Parent ~= nil then p:Destroy() end end)
+    local still = false
+    pcall(function() still = p.Parent ~= nil end)
+    if still then
+      pcall(function()
+        p.Transparency = 1
+        p.CanCollide = false
+        p.Anchored = true
+        p.CFrame = CFrame.new(0, -400, 0)
+      end)
+    end
   end
 end
 
@@ -221,6 +231,19 @@ local function dispose(inst)
   if stuck then pcall(function() inst.Name = inst.Name .. "#junk" end) end
 end
 
+-- Is this instance part of this vehicle? Checked three ways, because in this game f() can move
+-- parts out of the vehicle's Model to the map root: the remembered set, the Model, and the
+-- StrykerKey attribute stamped on every part.
+local function isOwn(entry, inst)
+  if inst == nil or type(inst) == "string" then return false end
+  if entry.own and entry.own[inst] then return true end
+  local mine = false
+  pcall(function()
+    mine = inst:IsDescendantOf(entry.car) or inst:GetAttribute("StrykerKey") == entry.key
+  end)
+  return mine
+end
+
 local function alive(entry)
   if entry.dead then return false end
   local ok, parent = pcall(function() return entry.car.Parent end)
@@ -231,8 +254,8 @@ end
 -- Targeting
 ---------------------------------------------------------------------------------------------
 
-local function lineOfFire(car, from, dir, range, skip)
-  local params = rayParams({ car })
+local function lineOfFire(entry, from, dir, range, skip)
+  local params = entry.params or rayParams({ entry.car })
   local origin = from
   for _ = 1, 4 do
     local hit = castRay(origin, dir * range, params)
@@ -242,7 +265,7 @@ local function lineOfFire(car, from, dir, range, skip)
       if type(hit.Instance) == "string" then
         own = skip[hit.Instance] == true
       else
-        own = hit.Instance:IsDescendantOf(car) or skip[hit.Instance.Parent.Name] == true
+        own = isOwn(entry, hit.Instance) or skip[hit.Instance.Parent.Name] == true
       end
     end)
     if own then
@@ -312,7 +335,7 @@ local function targetOnLine(from, dir, range, skip)
 end
 
 local function aimPoint(entry, from, dir, range, assist)
-  local to, hitInst = lineOfFire(entry.car, from, dir, range, entry.aboard or {})
+  local to, hitInst = lineOfFire(entry, from, dir, range, entry.aboard or {})
   if assist then
     local target, t = targetOnLine(from, dir, (to - from).Magnitude + 1, entry.aboard or {})
     if target then return from + dir * t, target end
@@ -637,6 +660,7 @@ local function keepRunning(entry, name, fn)
       local ok, err = pcall(fn)
       if ok then return end
       failures = failures + 1
+      entry.lastError = name .. ": " .. tostring(err)
       print("[Stryker] " .. name .. " loop error: " .. tostring(err))
       if tick() - lastTold > 10 then
         lastTold = tick()
@@ -678,9 +702,11 @@ local function newKit(car, root, entry)
     p.CanQuery = false
     p.Massless = true
     place(p, car)
+    entry.own[p] = true
+    pcall(function() p:SetAttribute("StrykerKey", entry.key) end)
     if weldTo then weld(weldTo, p) end
     table.insert(k.parts, p)
-    if #k.parts % 25 == 0 then task.wait() end
+    if #k.parts % 25 == 0 then task.wait(0.03) end
     return p
   end
   function k.block(name, sx, sy, sz, cf, color, material, weldTo)
@@ -1279,7 +1305,7 @@ local function blend(share, dt) return 1 - (1 - share) ^ (dt / 0.03) end
 -- First thing along the ray a vehicle can stand on or hit. Skips players (the API returns their
 -- name as a string) and non-colliding parts such as trigger zones; the vehicle itself is
 -- filtered out by `params`.
-local function solidHit(origin, dir, params)
+local function solidHit(origin, dir, params, entry)
   local length = dir.Magnitude
   if length < 0.001 then return nil end
   local unit = dir / length
@@ -1290,7 +1316,9 @@ local function solidHit(origin, dir, params)
     local solid, hitPos = false, nil
     pcall(function()
       hitPos = hit.Position
-      if type(hit.Instance) ~= "string" then solid = hit.Instance.CanCollide == true end
+      if type(hit.Instance) ~= "string" and not (entry and isOwn(entry, hit.Instance)) then
+        solid = hit.Instance.CanCollide == true
+      end
     end)
     if solid then return hit end
     if not hitPos then return nil end
@@ -1328,7 +1356,7 @@ local function sampleGround(entry, yawCF, baseY)
   for key, offset in pairs(points) do
     local world = yawCF * offset
     local origin = Vector3.new(world.X, baseY + DRIVE.PROBE_UP, world.Z)
-    local hit = solidHit(origin, Vector3.new(0, -(DRIVE.PROBE_UP + DRIVE.PROBE_DOWN), 0), entry.params)
+    local hit = solidHit(origin, Vector3.new(0, -(DRIVE.PROBE_UP + DRIVE.PROBE_DOWN), 0), entry.params, entry)
     if hit then heights[key] = hit.Position.Y end
   end
   return heights
@@ -1344,7 +1372,7 @@ local function blockedAhead(entry, yawCF, distance)
   local side = DIM.HULL_X * SCALE - 0.3
   for _, x in ipairs({ -side, 0, side }) do
     for _, y in ipairs(DRIVE.WALL_HEIGHTS) do
-      local hit = solidHit(yawCF * Vector3.new(x, y, edgeZ), dir, entry.params)
+      local hit = solidHit(yawCF * Vector3.new(x, y, edgeZ), dir, entry.params, entry)
       if hit then
         local normalY = 0
         pcall(function() normalY = hit.Normal.Y end)
@@ -1375,6 +1403,7 @@ local function driveStryker(entry)
     local now = tick()
     local dt = math.min(now - last, 0.2)
     last = now
+    entry.beatDrive = now
 
     local throttle, steer = 0, 0
     if seat.Occupant then
@@ -1396,7 +1425,8 @@ local function driveStryker(entry)
     local pos, heading = state.pos, state.heading
     local step = speed * dt
     if step ~= 0 and state.grounded then
-      if blockedAhead(entry, yawFrame(pos, heading), step) then
+      entry.blocked = blockedAhead(entry, yawFrame(pos, heading), step)
+      if entry.blocked then
         speed, step = 0, 0
       else
         heading = heading + speed / TURN_RADIUS * (steerAngle / MAX_STEER) * dt
@@ -1454,6 +1484,7 @@ local function driveStryker(entry)
       or math.abs(state.pitch - (state.shownPitch or 0)) > 0.0005
       or math.abs(state.roll - (state.shownRoll or 0)) > 0.0005
     state.pos, state.heading = pos, heading
+    entry.speed = speed
     if moved then
       state.shownPitch, state.shownRoll = state.pitch, state.roll
       chassis.CFrame = vehicleFrame(state) * entry.chassisOffset
@@ -1520,6 +1551,7 @@ local function stationLoop(entry)
     local now = tick()
     local dt = math.min(now - last, 0.3)
     last = now
+    entry.beatStation = now
     if now - lastCrew >= PERF.CREW_TICK then
       lastCrew = now
       updateCrew(entry)
@@ -1617,13 +1649,21 @@ local function buildStryker(owner, car, root, entry, dropOwnerIn)
   k.chassis = chassis
   pcall(function() car.PrimaryPart = chassis end)
 
+  entry.stage = "hull"
   buildHull(k)
+  entry.stage = "armour"
   buildArmour(k)
+  entry.stage = "bow"
   buildBow(k)
+  entry.stage = "roof"
   buildRoof(k)
+  entry.stage = "sides"
   buildSides(k)
+  entry.stage = "rear"
   buildRear(k)
+  entry.stage = "interior"
   buildInterior(k)
+  entry.stage = "wheels"
   for i, z in ipairs(DIM.AXLES) do
     local steer = 0
     if i == 1 then steer = 1 elseif i == 2 then steer = 0.55 end
@@ -1632,9 +1672,13 @@ local function buildStryker(owner, car, root, entry, dropOwnerIn)
     buildWheel(k, name, -DIM.WHEEL_X, z, steer)
     buildWheel(k, name, DIM.WHEEL_X, z, steer)
   end
+  entry.stage = "ramp"
   buildRamp(k)
+  entry.stage = "turret"
   buildRws(k)
+  entry.stage = "seats"
   buildSeats(k)
+  entry.stage = "controls"
   local anchors = {
     driver = k.anchor("DriverDoor", -(DIM.HULL_X + 0.9), 4.6, DIM.DRIVER_Z, chassis),
     commander = k.anchor("CommanderDoor", DIM.HULL_X + 0.9, 4.6, DIM.COMMANDER_Z, chassis),
@@ -1674,7 +1718,9 @@ local function buildStryker(owner, car, root, entry, dropOwnerIn)
 
   -- Unanchor everything except the chassis, last, after every weld exists. The anchored
   -- chassis carries the welded parts (and seated players) wherever its CFrame is set.
-  entry.params = rayParams({ car })
+  local ignore = { car }
+  for _, p in ipairs(k.parts) do ignore[#ignore + 1] = p end
+  entry.params = rayParams(ignore)
   entry.chassisOffset = k.off(0, DIM.CHASSIS_Y, DIM.CHASSIS_Z)
   entry.drive = { pos = root.Position, heading = headingOf(root), pitch = 0, roll = 0, vy = 0, grounded = false }
   for _, p in ipairs(k.parts) do
@@ -1710,12 +1756,12 @@ local function createStryker(key, owner, root, dropOwnerIn)
   local car = Instance.new("Model")
   car.Name = owner .. "_Stryker"
   f(car) -- the Model goes into the map first; parts are then parented into it
-  local entry = { key = key, car = car, carName = car.Name, owner = owner, seats = {}, aboard = {}, parts = {} }
+  local entry = { key = key, car = car, carName = car.Name, owner = owner, seats = {}, aboard = {}, parts = {}, own = {} }
   Strykers[key] = entry
   local ok, err = pcall(buildStryker, owner, car, root, entry, dropOwnerIn)
   if not ok then
-    print("[Stryker] build failed: " .. tostring(err))
-    if dropOwnerIn then tell("Stryker failed to build: " .. tostring(err), owner) end
+    print("[Stryker] build failed at stage " .. tostring(entry.stage) .. ": " .. tostring(err))
+    if dropOwnerIn then tell("Stryker failed to build (" .. tostring(entry.stage) .. "): " .. tostring(err), owner) end
     if Strykers[key] == entry then Strykers[key] = nil end
     destroyEntry(entry)
   end
@@ -1949,10 +1995,14 @@ local function clearLeftovers()
   local cleared = 0
   pcall(function()
     for _, inst in ipairs(mapRoot():GetChildren()) do
-      if LEFTOVERS[inst.Name] and inst:IsA("BasePart") and inst.Massless == true then
+      local live = false
+      for _, entry in pairs(Strykers) do
+        if isOwn(entry, inst) then live = true end
+      end
+      if not live and LEFTOVERS[inst.Name] and inst:IsA("BasePart") and inst.Massless == true then
         dispose(inst)
         cleared = cleared + 1
-        if cleared % 100 == 0 then task.wait() end
+        if cleared % 100 == 0 then task.wait(0.03) end
       end
     end
   end)
@@ -2114,6 +2164,55 @@ local function versionReport(player)
   tell("Stryker addon rev " .. COPY.REVISION .. ": " .. state .. ", " .. countActive() .. " built.", player)
 end
 
+-- :stryker debug  -  what the nearest Stryker is actually doing, for bug reports
+local function debugReport(player)
+  local pos = playerPos(player)
+  local best, bestDist = nil, math.huge
+  for _, entry in pairs(Strykers) do
+    local d = 0
+    pcall(function() d = (entry.chassis.Position - pos).Magnitude end)
+    if d < bestDist then best, bestDist = entry, d end
+  end
+  if not best then
+    tell("Stryker debug: no Stryker is running in this copy of the addon. Rev " .. COPY.REVISION
+      .. (copyActive() and ", in charge." or ", INACTIVE (another copy is in charge)."), player)
+    return
+  end
+  local e, now = best, tick()
+  local inModel = 0
+  for _, p in ipairs(e.parts or {}) do
+    local home = false
+    pcall(function() home = p.Parent == e.car end)
+    if home then inModel = inModel + 1 end
+  end
+  local function seatInfo(i)
+    local info = e.allSeats and e.allSeats[i]
+    if not info then return "missing" end
+    local occ, throttle, steer = "empty", 0, 0
+    pcall(function()
+      if info.seat.Occupant then occ = occupantName(info.seat) or "someone (name unreadable)" end
+      throttle, steer = info.seat.Throttle, info.seat.Steer
+    end)
+    return occ .. " (W/S " .. tostring(throttle) .. ", A/D " .. tostring(steer) .. ")"
+  end
+  local drive = e.drive or {}
+  local lines = {
+    "Stryker debug (" .. e.owner .. ", rev " .. COPY.REVISION .. "): alive " .. tostring(alive(e))
+      .. ", build stage " .. tostring(e.stage) .. ", " .. #(e.parts or {}) .. " parts, " .. inModel .. " inside the model.",
+    "Loops: drive " .. (e.beatDrive and string.format("%.1fs ago", now - e.beatDrive) or "NEVER RAN")
+      .. ", gun/ramp " .. (e.beatStation and string.format("%.1fs ago", now - e.beatStation) or "NEVER RAN")
+      .. ". Last error: " .. tostring(e.lastError or "none"),
+    "Driving: speed " .. string.format("%.1f", e.speed or 0) .. ", on ground " .. tostring(drive.grounded)
+      .. ", wall ahead " .. tostring(e.blocked) .. ", chassis anchored " .. tostring(e.chassis and e.chassis.Anchored),
+    "Seats: driver " .. seatInfo(1) .. "; commander " .. seatInfo(2) .. "; ramp open " .. tostring(e.rampOpen)
+      .. ", prompts " .. tostring(e.prompts ~= nil),
+  }
+  for _, line in ipairs(lines) do
+    print("[Stryker] " .. line)
+    tell(line, player)
+  end
+end
+
 local lastCleanup = -1000
 event("chatted", function(data)
   local player = data.Value[1]
@@ -2144,9 +2243,11 @@ event("chatted", function(data)
     local role = string.match(command, "^:stryker (%a+)$")
     if role == "driver" or role == "commander" or role == "board" then
       task.spawn(enterStryker, player, role)
+    elseif role == "debug" then
+      task.spawn(debugReport, player)
     end
   end
 end)
 
 -- Last line of the file. If this message is missing from the server log, the paste was cut off.
-print("[Stryker] rev 13 loaded: full file pasted, ready for :spawn stryker")
+print("[Stryker] rev 14 loaded: full file pasted, ready for :spawn stryker")
