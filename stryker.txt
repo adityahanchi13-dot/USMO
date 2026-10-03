@@ -1,293 +1,293 @@
 -- Stryker vehicle for Server Addons, rev 15, optimized build (same code as stryker.lua, names shortened).
 -- Commands: :spawn stryker, :stryker driver|commander|board|debug, :fire, :vehicles, :cleanup vehicles
-local a={}local b=1.25;local c=50;local d=15;local e=0.05;local g=45;local h=math.rad(30)local i="StrykerSpawnMarker"local j=0.5;local k=true;local l={a=4,b=15,c=30}local
-m={a=0.25,b=0.03,c=0.25,d=0.1}local n={a=196.2,b=3.5,c=4,d=10,e=0.5,f={4.0,7.5},g=0.7,h=0.25,i=-400}local
-o={PREFIX="StrykerAddon#",REVISION=15,name=false,root=false,retired=false,token=false,stamp=0,world=false}local function p(q,r,s)return Color3.new(q/255,r/255,s/255)end;local
-t={a=Color3.new(1,0.08,0.08),b=p(196,173,128),c=p(158,138,100),d=p(54,54,50),e=p(28,28,26),f=p(34,34,32),g=p(26,26,26),h=p(86,92,58),i=p(92,96,84),j=p(60,62,48),k=p(255,242,210),l=p(210,30,24),m=p(110,24,20),n=p(125,114,82),o=p(255,150,30),p=p(30,40,38)}local
-u={a=Enum.Material.SmoothPlastic,b=Enum.Material.Metal,c=Enum.Material.Rubber,d=Enum.Material.Neon,e=Enum.Material.Fabric}local v={a=Enum.PartType.Cylinder}local
-w={a=1.9,b=3.96,c=30,d=1.73,e=1.3,f=3.75,g={-6.52,-2.55,1.75,6.17},h=-11.6,i=11.6,j=4.3,k=2.9,l=1.8,m=2.0,n=3.7,o=5.4,p=6.7,q=-7.1,r=-1.0,s=5.0,t=4.4,u=math.rad(114),v=1.5,w=-1.0,x=9.5,y=3.0,z=-2.4,aa=-6.8,ab=0.6,ac=-3.0,ad=2.2,ae={2.4,4.8,7.2,9.6}}local
-x={a=1000,b=math.rad(60),c=math.rad(45),d=math.rad(-20),e=math.rad(60),f=5,g=0.09,h=0.8,i=math.rad(0.3),j=4.95,k=2.0,l=0.08,m=80,n=2.5,o=25,p=900,q=0.3,r=4.5,s=3,t=true,u=math.rad(1.5),v=5,w=false}local
-function y(z,A)if A>0 then return math.atan(z/A)end;if A<0 then if z>=0 then return math.atan(z/A)+math.pi end;return math.atan(z/A)-math.pi end;if z>0 then return math.pi/2 elseif z<0 then
-return-math.pi/2 end;return 0 end;local function B(C)return CFrame.Angles(math.rad(C),0,0)end;local function D(C)return CFrame.Angles(0,math.rad(C),0)end;local function E(C)return
-CFrame.Angles(0,0,math.rad(C))end;local function F(G,H)local I=Vector3.new(H.X,0,H.Z)if I.Magnitude<0.01 then I=Vector3.new(0,0,-1)end;return CFrame.new(G,G+I.Unit)end;local function J(K,L)local
-M=Instance.new("WeldConstraint")M.Part0=K;M.Part1=L;M.Parent=K;return M end;local function N(O,P)if P then pcall(function()O.Parent=P end)end;pcall(f,O)if P then local
-Q=false;pcall(function()Q=O.Parent==P end)if not Q then pcall(function()O.Parent=P end)end end;return O end;local function R(S,T)pcall(announce,S,T)end;local function U()local V={}local
-W,X=pcall(getPlayers)if W and type(X)=="table"then for Y,Z in ipairs(X)do V[Z]=true end end;return V end;local function _(a0)local W,a1=pcall(getPlayerPosition,a0)if not W then return nil end;if
-typeof(a1)=="CFrame"then return a1 end;if typeof(a1)=="Vector3"then return CFrame.new(a1)end;return nil end;local function a2(a0)local a1=_(a0)if a1 then return a1.Position end;return nil end;local
-function a3(a0)local W,a4=pcall(getPlayerHealth,a0)if W and type(a4)=="number"then return a4 end;return-1 end;local function a5(a6,a7)local a8=a6.Occupant;if not a8 then return nil end;a7=a7 or
-U()local W,a0=pcall(function()return a8.Parent.Name end)if W and type(a0)=="string"and a7[a0]then return a0 end;local a9=a6.Position;local aa,ab=nil,4;for ac in pairs(a7)do local G=a2(ac)if G then
-local ad=(G-a9).Magnitude;if ad<ab then aa,ab=ac,ad end end end;return aa end;local function ae(af)if type(af)=="string"then return af end;local W,a0=pcall(function()return af.Name end)if W and
-type(a0)=="string"then return a0 end;return nil end;local function ag(ah)local W,ai=pcall(function()return ah:FindFirstChildOfClass("Humanoid")end)if W then return ai end;return nil end;local function
-aj(ak)local W,al=pcall(function()local Z=RaycastParams.new()Z.FilterDescendantsInstances=ak;Z.FilterType=Enum.RaycastFilterType.Exclude;return Z end)if W then return al end;return nil end;local
-function am(an,ao,al)local W,ap=pcall(raycast,an,ao,al)if W then return ap end;return nil end;local function aq(G)local ap=am(G+Vector3.new(0,2,0),Vector3.new(0,-60,0),aj({}))if ap and
-type(ap.Instance)~="string"then return ap.Position end;return nil end;local function ar(Z)pcall(function()Z:Destroy()end)end;local function as(O)if not O then return
-end;pcall(function()O:Destroy()end)local at=false;pcall(function()at=O.Parent~=nil end)if at then pcall(function()O.Name=O.Name.."#junk"end)end end;local function
-au(av)av.dead=true;pcall(function()av.car:Destroy()end)for Y,Z in ipairs(av.extras or{})do as(Z)end;for Y,Z in ipairs(av.parts or{})do pcall(function()if Z.Parent~=nil then Z:Destroy()end end)local
-aw=false;pcall(function()aw=Z.Parent~=nil end)if aw then pcall(function()Z.Transparency=1;Z.CanCollide=false;Z.Anchored=true;Z.CFrame=CFrame.new(0,-400,0)end)end end end;local function ax(ay)local
-av=a[ay]if av then au(av)a[ay]=nil end end;local function az(av,O)if O==nil or type(O)=="string"then return false end;if av.own and av.own[O]then return true end;local
-aA=false;pcall(function()aA=O:IsDescendantOf(av.car)or O:GetAttribute("StrykerBuild")==av.build end)return aA end;local function aB(av)if av.dead then return false end;local W,P=pcall(function()return
-av.car.Parent end)return W and P~=nil end;local function aC(av,an,aD,aE,aF)local al=av.params or aj({av.car})local aG=an;for Y=1,4 do local ap=am(aG,aD*aE,al)if not ap then break end;local
-aH=false;pcall(function()if type(ap.Instance)=="string"then aH=aF[ap.Instance]==true else aH=az(av,ap.Instance)or aF[ap.Instance.Parent.Name]==true end end)if aH then aG=ap.Position+aD*0.3 else return
-ap.Position,ap.Instance end end;return an+aD*aE,false end;local function aI()if not o.root then pcall(function()local
+local a={}local b=1.25;local c=50;local d=15;local e=0.05;local g=45;local h=math.rad(30)local i="StrykerSpawnMarker"local j=0.5;local k=true;local l={a=4,b=15,c=30}local m={a=0.25,b=0.03,c=0.25,
+d=0.1}local n={a=196.2,b=3.5,c=4,d=10,e=0.5,f={4.0,7.5},g=0.7,h=0.25,i=-400}local o={PREFIX="StrykerAddon#",REVISION=15,name=false,root=false,retired=false,token=false,stamp=0,world=false}local
+function p(q,r,s)return Color3.new(q/255,r/255,s/255)end;local t={a=Color3.new(1,0.08,0.08),b=p(196,173,128),c=p(158,138,100),d=p(54,54,50),e=p(28,28,26),f=p(34,34,32),g=p(26,26,26),h=p(86,92,58),
+i=p(92,96,84),j=p(60,62,48),k=p(255,242,210),l=p(210,30,24),m=p(110,24,20),n=p(125,114,82),o=p(255,150,30),p=p(30,40,38)}local u={a=Enum.Material.SmoothPlastic,b=Enum.Material.Metal,
+c=Enum.Material.Rubber,d=Enum.Material.Neon,e=Enum.Material.Fabric}local v={a=Enum.PartType.Cylinder}local w={a=1.9,b=3.96,c=30,d=1.73,e=1.3,f=3.75,g={-6.52,-2.55,1.75,6.17},h=-11.6,i=11.6,j=4.3,
+k=2.9,l=1.8,m=2.0,n=3.7,o=5.4,p=6.7,q=-7.1,r=-1.0,s=5.0,t=4.4,u=math.rad(114),v=1.5,w=-1.0,x=9.5,y=3.0,z=-2.4,aa=-6.8,ab=0.6,ac=-3.0,ad=2.2,ae={2.4,4.8,7.2,9.6}}local x={a=1000,b=math.rad(60),
+c=math.rad(45),d=math.rad(-20),e=math.rad(60),f=5,g=0.09,h=0.8,i=math.rad(0.3),j=4.95,k=2.0,l=0.08,m=80,n=2.5,o=25,p=900,q=0.3,r=4.5,s=3,t=true,u=math.rad(1.5),v=5,w=false}local function y(z,A)if A>0
+then return math.atan(z/A)end;if A<0 then if z>=0 then return math.atan(z/A)+math.pi end;return math.atan(z/A)-math.pi end;if z>0 then return math.pi/2 elseif z<0 then return-math.pi/2 end;return 0
+end;local function B(C)return CFrame.Angles(math.rad(C),0,0)end;local function D(C)return CFrame.Angles(0,math.rad(C),0)end;local function E(C)return CFrame.Angles(0,0,math.rad(C))end;local function
+F(G,H)local I=Vector3.new(H.X,0,H.Z)if I.Magnitude<0.01 then I=Vector3.new(0,0,-1)end;return CFrame.new(G,G+I.Unit)end;local function J(K,L)local M=Instance.new("WeldConstraint")M.Part0=K;M.Part1=L;
+M.Parent=K;return M end;local function N(O,P)if P then pcall(function()O.Parent=P end)end;pcall(f,O)if P then local Q=false;pcall(function()Q=O.Parent==P end)if not Q then pcall(function()O.Parent=P
+end)end end;return O end;local function R(S,T)pcall(announce,S,T)end;local function U()local V={}local W,X=pcall(getPlayers)if W and type(X)=="table"then for Y,Z in ipairs(X)do V[Z]=true end end;
+return V end;local function _(a0)local W,a1=pcall(getPlayerPosition,a0)if not W then return nil end;if typeof(a1)=="CFrame"then return a1 end;if typeof(a1)=="Vector3"then return CFrame.new(a1)end;
+return nil end;local function a2(a0)local a1=_(a0)if a1 then return a1.Position end;return nil end;local function a3(a0)local W,a4=pcall(getPlayerHealth,a0)if W and type(a4)=="number"then return a4
+end;return-1 end;local function a5(a6,a7)local a8=a6.Occupant;if not a8 then return nil end;a7=a7 or U()local W,a0=pcall(function()return a8.Parent.Name end)if W and type(a0)=="string"and a7[a0]then
+return a0 end;local a9=a6.Position;local aa,ab=nil,4;for ac in pairs(a7)do local G=a2(ac)if G then local ad=(G-a9).Magnitude;if ad<ab then aa,ab=ac,ad end end end;return aa end;local function ae(af)if
+type(af)=="string"then return af end;local W,a0=pcall(function()return af.Name end)if W and type(a0)=="string"then return a0 end;return nil end;local function ag(ah)local W,ai=pcall(function()return
+ah:FindFirstChildOfClass("Humanoid")end)if W then return ai end;return nil end;local function aj(ak)local W,al=pcall(function()local Z=RaycastParams.new()Z.FilterDescendantsInstances=ak;
+Z.FilterType=Enum.RaycastFilterType.Exclude;return Z end)if W then return al end;return nil end;local function am(an,ao,al)local W,ap=pcall(raycast,an,ao,al)if W then return ap end;return nil end;
+local function aq(G)local ap=am(G+Vector3.new(0,2,0),Vector3.new(0,-60,0),aj({}))if ap and type(ap.Instance)~="string"then return ap.Position end;return nil end;local function
+ar(Z)pcall(function()Z:Destroy()end)end;local function as(O)if not O then return end;pcall(function()O:Destroy()end)local at=false;pcall(function()at=O.Parent~=nil end)if at then
+pcall(function()O.Name=O.Name.."#junk"end)end end;local function au(av)av.dead=true;pcall(function()av.car:Destroy()end)for Y,Z in ipairs(av.extras or{})do as(Z)end;for Y,Z in ipairs(av.parts or{})do
+pcall(function()if Z.Parent~=nil then Z:Destroy()end end)local aw=false;pcall(function()aw=Z.Parent~=nil end)if aw then pcall(function()Z.Transparency=1;Z.CanCollide=false;Z.Anchored=true;
+Z.CFrame=CFrame.new(0,-400,0)end)end end end;local function ax(ay)local av=a[ay]if av then au(av)a[ay]=nil end end;local function az(av,O)if O==nil or type(O)=="string"then return false end;if av.own
+and av.own[O]then return true end;local aA=false;pcall(function()aA=O:IsDescendantOf(av.car)or O:GetAttribute("StrykerBuild")==av.build end)return aA end;local function aB(av)if av.dead then return
+false end;local W,P=pcall(function()return av.car.Parent end)return W and P~=nil end;local function aC(av,an,aD,aE,aF)local al=av.params or aj({av.car})local aG=an;for Y=1,4 do local ap=am(aG,aD*aE,
+al)if not ap then break end;local aH=false;pcall(function()if type(ap.Instance)=="string"then aH=aF[ap.Instance]==true else aH=az(av,ap.Instance)or aF[ap.Instance.Parent.Name]==true end end)if aH then
+aG=ap.Position+aD*0.3 else return ap.Position,ap.Instance end end;return an+aD*aE,false end;local function aI()if not o.root then pcall(function()local
 aJ=Instance.new("Part")aJ.Name="StrykerProbe"aJ.Anchored=true;aJ.CanCollide=false;aJ.Transparency=1;aJ.CFrame=CFrame.new(0,3000,0)f(aJ)o.root=aJ.Parent;aJ:Destroy()end)end;return o.root end;local
 function aK()if not o.world then pcall(function()local aL=aI()for Y=1,4 do if aL.ClassName=="Workspace"then o.world=aL;return end;aL=aL.Parent end end)if not o.world then o.world=aI()end end;return
-o.world end;local function aM(A)if type(A)~="table"then return false end;local W,aN=pcall(function()return A.isTarget end)return W and aN==true end;local function aO(an,aD,aE,aF)local aa,aP=nil,aE;for
-Z in pairs(U())do if not aF[Z]then local G=a2(Z)if G then local aQ=G-an;local aR=aQ:Dot(aD)if aR>0 and aR<aP and(aQ-aD*aR).Magnitude<=x.n and a3(Z)>0 then aa,aP={name=Z,player=Z,isTarget=true},aR end
-end end end;return aa,aP end;local function aS(av,an,aD,aE,aT)local aU,aV=aC(av,an,aD,aE,av.aboard or{})if aT then local aW,aR=aO(an,aD,(aU-an).Magnitude+1,av.aboard or{})if aW then return an+aD*aR,aW
-end end;return aU,aV end;local function aX(ap)if not ap then return nil end;if aM(ap)then return ap end;if type(ap)=="string"then return{name=ap,player=ap,isTarget=true}end;local a7=U()local aL=ap;for
-Y=1,6 do local W,P=pcall(function()return aL.Parent end)if not W or not P then return nil end;aL=P;local ai=ag(aL)if ai then if a7[aL.Name]then
-return{name=aL.Name,player=aL.Name,isTarget=true}end;return{name=aL.Name,humanoid=ai,model=aL,isTarget=true}end end;return nil end;local function aY(aW,aZ)if not aM(aW)then return false end;if not
-aW.player then return true end;if not aZ then return false end;local a_,aA=pcall(getTeam,aZ)local b0,b1=pcall(getTeam,aW.player)return a_ and b0 and aA~=nil and b1~=nil and aA~=b1 end;local
-b2={a=Color3.new(1,0.86,0.5),b=Color3.new(1,0.46,0.12),c=Color3.new(1,0.82,0.35),d=Color3.new(1,0.62,0.2),e=Color3.new(0.7,0.62,0.47)}local function b3(aR)return
-TweenInfo.new(aR,Enum.EasingStyle.Linear,Enum.EasingDirection.Out,0,false,0)end;local function b4(Z,aR)task.spawn(function()task.wait(aR)ar(Z)end)end;local function b5(b6,a0,b7,b8,a1,b9,ba)local
-Z=Instance.new("Part")Z.Name=a0;if b7 then Z.Shape=Enum.PartType.Ball
-end;Z.Size=b8;Z.CFrame=a1;Z.Color=b9;Z.Material=Enum.Material.Neon;Z.Transparency=ba;Z.Anchored=true;Z.CanCollide=false;Z.CanQuery=false;Z.CanTouch=false;return N(Z,b6)end;local function
-bb(Z,bc,bd)pcall(tween,Z,b3(bc),{Transparency=1,Size=Z.Size*bd})b4(Z,bc+0.05)end;local function be(Z,b9,bf,aE)pcall(function()local
-bg=Instance.new("PointLight")bg.Color=b9;bg.Brightness=bf;bg.Range=aE;bg.Parent=Z end)end;local function bh(b6,G,b8,bi,b9,bc)local
-Z=b5(b6,"SmokePuff",false,Vector3.new(0.2,0.2,0.2),CFrame.new(G),b9,1)local W,bj=pcall(function()local
-bk=Instance.new("Smoke")bk.Size=b8;bk.RiseVelocity=bi;bk.Opacity=0.5;bk.Color=b9;bk.Parent=Z;return bk end)task.spawn(function()task.wait(bc)if W then pcall(function()bj.Enabled=false
-end)end;task.wait(3)ar(Z)end)end;local function bl(b6,G,b9,b8)local Z=b5(b6,"Impact",true,Vector3.new(b8,b8,b8),CFrame.new(G),b9,0)be(Z,b9,2,8)bb(Z,0.2,3)end;local function bm(b6,an,aU,bn)local
-bo=(aU-an).Magnitude;if bo<0.5 then return 0 end;local aD=(aU-an).Unit;local bp=math.max(0.03,bo/bn)local
-Z=b5(b6,"Tracer",false,Vector3.new(0.18,0.18,2.5),CFrame.new(an,an+aD),b2.d,0)pcall(tween,Z,b3(bp),{CFrame=CFrame.new(aU,aU+aD)})b4(Z,bp)return bp end;local function bq(a0,br)local a4=a3(a0)if a4<=0
-then return false end;if a4-br<=0 then pcall(kill,a0)return true end;pcall(damage,a0,br)return false end;local function bs(ai,br)local
+o.world end;local function aM(A)if type(A)~="table"then return false end;local W,aN=pcall(function()return A.isTarget end)return W and aN==true end;local function aO(an,aD,aE,aF)local aa,aP=nil,aE;
+for Z in pairs(U())do if not aF[Z]then local G=a2(Z)if G then local aQ=G-an;local aR=aQ:Dot(aD)if aR>0 and aR<aP and(aQ-aD*aR).Magnitude<=x.n and a3(Z)>0 then aa,aP={name=Z,player=Z,isTarget=true},aR
+end end end end;return aa,aP end;local function aS(av,an,aD,aE,aT)local aU,aV=aC(av,an,aD,aE,av.aboard or{})if aT then local aW,aR=aO(an,aD,(aU-an).Magnitude+1,av.aboard or{})if aW then return
+an+aD*aR,aW end end;return aU,aV end;local function aX(ap)if not ap then return nil end;if aM(ap)then return ap end;if type(ap)=="string"then return{name=ap,player=ap,isTarget=true}end;local
+a7=U()local aL=ap;for Y=1,6 do local W,P=pcall(function()return aL.Parent end)if not W or not P then return nil end;aL=P;local ai=ag(aL)if ai then if a7[aL.Name]then return{name=aL.Name,
+player=aL.Name,isTarget=true}end;return{name=aL.Name,humanoid=ai,model=aL,isTarget=true}end end;return nil end;local function aY(aW,aZ)if not aM(aW)then return false end;if not aW.player then return
+true end;if not aZ then return false end;local a_,aA=pcall(getTeam,aZ)local b0,b1=pcall(getTeam,aW.player)return a_ and b0 and aA~=nil and b1~=nil and aA~=b1 end;local b2={a=Color3.new(1,0.86,0.5),
+b=Color3.new(1,0.46,0.12),c=Color3.new(1,0.82,0.35),d=Color3.new(1,0.62,0.2),e=Color3.new(0.7,0.62,0.47)}local function b3(aR)return TweenInfo.new(aR,Enum.EasingStyle.Linear,Enum.EasingDirection.Out,
+0,false,0)end;local function b4(Z,aR)task.spawn(function()task.wait(aR)ar(Z)end)end;local function b5(b6,a0,b7,b8,a1,b9,ba)local Z=Instance.new("Part")Z.Name=a0;if b7 then Z.Shape=Enum.PartType.Ball
+end;Z.Size=b8;Z.CFrame=a1;Z.Color=b9;Z.Material=Enum.Material.Neon;Z.Transparency=ba;Z.Anchored=true;Z.CanCollide=false;Z.CanQuery=false;Z.CanTouch=false;return N(Z,b6)end;local function bb(Z,bc,
+bd)pcall(tween,Z,b3(bc),{Transparency=1,Size=Z.Size*bd})b4(Z,bc+0.05)end;local function be(Z,b9,bf,aE)pcall(function()local bg=Instance.new("PointLight")bg.Color=b9;bg.Brightness=bf;bg.Range=aE;
+bg.Parent=Z end)end;local function bh(b6,G,b8,bi,b9,bc)local Z=b5(b6,"SmokePuff",false,Vector3.new(0.2,0.2,0.2),CFrame.new(G),b9,1)local W,bj=pcall(function()local bk=Instance.new("Smoke")bk.Size=b8;
+bk.RiseVelocity=bi;bk.Opacity=0.5;bk.Color=b9;bk.Parent=Z;return bk end)task.spawn(function()task.wait(bc)if W then pcall(function()bj.Enabled=false end)end;task.wait(3)ar(Z)end)end;local function
+bl(b6,G,b9,b8)local Z=b5(b6,"Impact",true,Vector3.new(b8,b8,b8),CFrame.new(G),b9,0)be(Z,b9,2,8)bb(Z,0.2,3)end;local function bm(b6,an,aU,bn)local bo=(aU-an).Magnitude;if bo<0.5 then return 0 end;
+local aD=(aU-an).Unit;local bp=math.max(0.03,bo/bn)local Z=b5(b6,"Tracer",false,Vector3.new(0.18,0.18,2.5),CFrame.new(an,an+aD),b2.d,0)pcall(tween,Z,b3(bp),{CFrame=CFrame.new(aU,aU+aD)})b4(Z,
+bp)return bp end;local function bq(a0,br)local a4=a3(a0)if a4<=0 then return false end;if a4-br<=0 then pcall(kill,a0)return true end;pcall(damage,a0,br)return false end;local function bs(ai,br)local
 bt=false;pcall(function()ai.Health=math.max(0,ai.Health-br)bt=ai.Health<=0 end)return bt end;local function bu(bv,br,bw)if not bv then return nil end;if bv.player then if bw[bv.player]then return nil
 end;return bq(bv.player,br)end;return bs(bv.humanoid,br)end;local function bx(a6,T)if not a6 or not T then return false end;local by=false;pcall(function()by=a6.Occupant~=nil end)if not by then return
-false end;local W,a0=pcall(function()return a6.Occupant.Parent.Name end)if W and a0==T then return true end;local G=a2(T)return G~=nil and(G-a6.Position).Magnitude<x.r end;local function
-bz(av,bA)local bB,bC,bD={},{},{}for bE=1,x.f do if bE>1 then task.wait(x.g)end;if not aB(av)then return end;local W,bF=pcall(function()local bG=av.cradle.CFrame*CFrame.new(0,0,-x.j*b)local
-bH=CFrame.Angles((math.random()-0.5)*2*x.i,(math.random()-0.5)*2*x.i,0)local aD=(bG*bH).LookVector;local an=bG.Position;local
-bI=b5(av.car,"MuzzleFlash",true,Vector3.new(0.9,0.9,0.9),CFrame.new(an+aD*0.5),b2.a,0)be(bI,b2.a,3,12)bb(bI,0.08,2)av.recoil=x.q;local aU,ap=aS(av,an,aD,x.a,true)local bv=aX(ap)local
-bt=bu(bv,x.o,av.aboard or{})if bt~=nil then if not bB[bv.name]then table.insert(bD,bv.name)end;bB[bv.name]=(bB[bv.name]or 0)+1;if bt then bC[bv.name]=true end end;local bp=bm(av.car,an,aU,x.p)if ap
-then task.spawn(function()task.wait(bp)if not aB(av)then return end;if bt~=nil then bl(av.car,aU,b2.b,0.6)else bl(av.car,aU,b2.c,0.4)bh(av.car,aU,1.5,2,b2.e,0.25)end end)end end)if not W then
-av.lastError="gun: "..tostring(bF)print("[Stryker] gun round error: "..tostring(bF))end end;local bJ={}for Y,a0 in ipairs(bD)do local bK=a0 .." hit "..bB[a0].."x"if bC[a0]then
-bK=bK..", killed"end;table.insert(bJ,bK)end;if#bJ>0 and bA then R(".50 cal: "..table.concat(bJ,"; "),bA)end end;local function bL(av,bA)if tick()<av.nextBurst then return
-end;av.nextBurst=tick()+x.f*x.g+x.h;task.spawn(bz,av,bA)end;local function bM(av,af)local a0=ae(af)if not a0 or not aB(av)or not av.allSeats then return end;local bN=av.allSeats[2].seat;if
-bx(bN,a0)then av.commander=av.commander or a0;bL(av,a0)return end;av.nagged=av.nagged or{}if tick()-(av.nagged[a0]or 0)>x.s then
-av.nagged[a0]=tick()R("Sit in the Stryker's commander seat to fire the .50.",a0)end end;local function bO(a6,af,a0)local bP=false;pcall(function()local bQ=nil;if type(af)~="string"then bQ=af.Character
-end;if not bQ then bQ=aK():FindFirstChild(a0)end;a6:Sit(bQ:FindFirstChildOfClass("Humanoid"))bP=true end)if not bP and a0 then pcall(setPlayerPosition,a0,a6.CFrame*CFrame.new(0,2.5,0))end end;local
-function bR(bS,bT)if bS and bS.Enabled~=bT then bS.Enabled=bT end end;local function bU(bS,bV,bK)if bS and bS[bV]~=bK then bS[bV]=bK end end;local function bW(P,a0,ay,bX,bY,aE,bZ)local
-bS=Instance.new("ProximityPrompt")bS.Name=a0;bS.ActionText=bX;bS.ObjectText=bY;bS.KeyboardKeyCode=ay;bS.HoldDuration=bZ;bS.MaxActivationDistance=aE;bS.RequiresLineOfSight=false;bS.Parent=P;return bS
-end;local function b_(c0,c1)local
-c2=Instance.new("Part")c2.Name="AimDot"c2.Shape=Enum.PartType.Ball;c2.Size=Vector3.new(0.8,0.8,0.8)c2.Color=t.a;c2.Material=u.d;c2.Transparency=1;c2.CFrame=c1;c2.Anchored=true;c2.CanCollide=false;c2.CanQuery=false;c2.CanTouch=false;return
-N(c2,c0)end;local function c3(av,an,aD,aE)local G,ap=aS(av,an,aD,aE,false)local b8=math.max(0.6,(G-an).Magnitude*0.012)pcall(function()if not av.dotAt or(G-av.dotAt).Magnitude>0.05 then
-av.aimDot.CFrame=CFrame.new(G)av.dotAt=G end;if math.abs(b8-av.dotSize)>0.1*b8 then av.aimDot.Size=Vector3.new(b8,b8,b8)av.dotSize=b8 end;if av.aimDot.Transparency~=0 then av.aimDot.Transparency=0 end
-end)return ap end;local function c4(av)pcall(function()if av.aimDot.Transparency~=1 then av.aimDot.Transparency=1 end end)end;local function c5(av,a0,c6)task.spawn(function()local c7,c8=0,0;while
-aB(av)do local W,bF=pcall(c6)if W then return end;c8=c8+1;av.lastError=a0 ..": "..tostring(bF)print("[Stryker] "..a0 .." loop error: "..tostring(bF))if tick()-c7>10 then c7=tick()R("Stryker "..a0
+false end;local W,a0=pcall(function()return a6.Occupant.Parent.Name end)if W and a0==T then return true end;local G=a2(T)return G~=nil and(G-a6.Position).Magnitude<x.r end;local function bz(av,
+bA)local bB,bC,bD={},{},{}for bE=1,x.f do if bE>1 then task.wait(x.g)end;if not aB(av)then return end;local W,bF=pcall(function()local bG=av.cradle.CFrame*CFrame.new(0,0,-x.j*b)local
+bH=CFrame.Angles((math.random()-0.5)*2*x.i,(math.random()-0.5)*2*x.i,0)local aD=(bG*bH).LookVector;local an=bG.Position;local bI=b5(av.car,"MuzzleFlash",true,Vector3.new(0.9,0.9,0.9),
+CFrame.new(an+aD*0.5),b2.a,0)be(bI,b2.a,3,12)bb(bI,0.08,2)av.recoil=x.q;local aU,ap=aS(av,an,aD,x.a,true)local bv=aX(ap)local bt=bu(bv,x.o,av.aboard or{})if bt~=nil then if not bB[bv.name]then
+table.insert(bD,bv.name)end;bB[bv.name]=(bB[bv.name]or 0)+1;if bt then bC[bv.name]=true end end;local bp=bm(av.car,an,aU,x.p)if ap then task.spawn(function()task.wait(bp)if not aB(av)then return end;
+if bt~=nil then bl(av.car,aU,b2.b,0.6)else bl(av.car,aU,b2.c,0.4)bh(av.car,aU,1.5,2,b2.e,0.25)end end)end end)if not W then
+av.lastError="gun: "..tostring(bF)print("[Stryker] gun round error: "..tostring(bF))end end;local bJ={}for Y,a0 in ipairs(bD)do local bK=a0 .." hit "..bB[a0].."x"if bC[a0]then bK=bK..", killed"end;
+table.insert(bJ,bK)end;if#bJ>0 and bA then R(".50 cal: "..table.concat(bJ,"; "),bA)end end;local function bL(av,bA)if tick()<av.nextBurst then return end;av.nextBurst=tick()+x.f*x.g+x.h;
+task.spawn(bz,av,bA)end;local function bM(av,af)local a0=ae(af)if not a0 or not aB(av)or not av.allSeats then return end;local bN=av.allSeats[2].seat;if bx(bN,a0)then av.commander=av.commander or a0;
+bL(av,a0)return end;av.nagged=av.nagged or{}if tick()-(av.nagged[a0]or 0)>x.s then av.nagged[a0]=tick()R("Sit in the Stryker's commander seat to fire the .50.",a0)end end;local function bO(a6,af,
+a0)local bP=false;pcall(function()local bQ=nil;if type(af)~="string"then bQ=af.Character end;if not bQ then bQ=aK():FindFirstChild(a0)end;a6:Sit(bQ:FindFirstChildOfClass("Humanoid"))bP=true end)if not
+bP and a0 then pcall(setPlayerPosition,a0,a6.CFrame*CFrame.new(0,2.5,0))end end;local function bR(bS,bT)if bS and bS.Enabled~=bT then bS.Enabled=bT end end;local function bU(bS,bV,bK)if bS and
+bS[bV]~=bK then bS[bV]=bK end end;local function bW(P,a0,ay,bX,bY,aE,bZ)local bS=Instance.new("ProximityPrompt")bS.Name=a0;bS.ActionText=bX;bS.ObjectText=bY;bS.KeyboardKeyCode=ay;bS.HoldDuration=bZ;
+bS.MaxActivationDistance=aE;bS.RequiresLineOfSight=false;bS.Parent=P;return bS end;local function b_(c0,c1)local c2=Instance.new("Part")c2.Name="AimDot"c2.Shape=Enum.PartType.Ball;
+c2.Size=Vector3.new(0.8,0.8,0.8)c2.Color=t.a;c2.Material=u.d;c2.Transparency=1;c2.CFrame=c1;c2.Anchored=true;c2.CanCollide=false;c2.CanQuery=false;c2.CanTouch=false;return N(c2,c0)end;local function
+c3(av,an,aD,aE)local G,ap=aS(av,an,aD,aE,false)local b8=math.max(0.6,(G-an).Magnitude*0.012)pcall(function()if not av.dotAt or(G-av.dotAt).Magnitude>0.05 then av.aimDot.CFrame=CFrame.new(G)av.dotAt=G
+end;if math.abs(b8-av.dotSize)>0.1*b8 then av.aimDot.Size=Vector3.new(b8,b8,b8)av.dotSize=b8 end;if av.aimDot.Transparency~=0 then av.aimDot.Transparency=0 end end)return ap end;local function
+c4(av)pcall(function()if av.aimDot.Transparency~=1 then av.aimDot.Transparency=1 end end)end;local function c5(av,a0,c6)task.spawn(function()local c7,c8=0,0;while aB(av)do local W,bF=pcall(c6)if W
+then return end;c8=c8+1;av.lastError=a0 ..": "..tostring(bF)print("[Stryker] "..a0 .." loop error: "..tostring(bF))if tick()-c7>10 then c7=tick()R("Stryker "..a0
 .." hit an error and restarted: "..tostring(bF),av.owner)end;task.wait(math.min(10,c8))end end)end;local function c9(c0,ca,av)local cb={parts={},wheels={},troopSeats={}}av.parts=cb.parts;function
-cb.at(A,z,cc)return ca*CFrame.new(A*b,z*b,cc*b)end;function cb.off(A,z,cc)return CFrame.new(A*b,z*b,cc*b)end;function cb.facing(A,z,cc,cd,ce,cf)local Z=Vector3.new(A,z,cc)*b;return
-ca*CFrame.new(Z,Z+Vector3.new(cd,ce,cf))end;function cb.make(cg,a0,b8,a1,b9,ch,ci,cj)if av.dead or not c0.Parent then error("removed while it was being built",0)end;local
-Z=Instance.new(cg)Z.Name=a0;if cj then Z.Shape=cj
-end;Z.Size=b8*b;Z.CFrame=a1;Z.Color=b9;Z.Material=ch;Z.Anchored=true;Z.CanCollide=false;Z.CanTouch=false;Z.CanQuery=false;Z.Massless=true;N(Z,c0)av.own[Z]=true;pcall(function()Z:SetAttribute("StrykerKey",av.key)Z:SetAttribute("StrykerBuild",av.build)end)if
-ci then J(ci,Z)end;table.insert(cb.parts,Z)if#cb.parts%25==0 then task.wait(0.03)end;return Z end;function cb.block(a0,ck,cl,cm,a1,b9,ch,ci)return
-cb.make("Part",a0,Vector3.new(ck,cl,cm),a1,b9,ch,ci,false)end;function cb.wedge(a0,ck,cl,cm,a1,b9,ch,ci)return cb.make("WedgePart",a0,Vector3.new(ck,cl,cm),a1,b9,ch,ci,false)end;function
-cb.cylinder(a0,cn,co,a1,b9,ch,ci)return cb.make("Part",a0,Vector3.new(cn,co,co),a1,b9,ch,ci,v.a)end;function cb.bolt(a1,ci)if not k then return nil end;return
-cb.cylinder("Bolt",0.06,0.16,a1,t.c,u.b,ci)end;function cb.solid(Z)Z.CanCollide=true;Z.CanQuery=true;return Z end;function cb.seat(cg,a0,a1,ci)local
-bk=cb.make(cg,a0,Vector3.new(1.5,0.4,1.4),a1,t.j,u.e,ci,false)bk.CanCollide=true;bk.CanTouch=true;bk.CanQuery=true;return bk end;function cb.anchor(a0,A,z,cc,ci)local
-Z=cb.block(a0,1.6,2.4,1.6,cb.at(A,z,cc),t.e,u.a,ci)Z.Transparency=1;Z.CanQuery=true;return Z end;function cb.joint(a0,K,L,cp,cq)local
-cr=Instance.new("Weld")cr.Name=a0;cr.Part0=K;cr.Part1=L;cr.C0=cp;cr.C1=cq;cr.Parent=K;return cr end;return cb end;local function cs(cb,a0,A,cc,ct)local bk=1;if A<0 then bk=-1 end;local
-q,M,z=w.d,w.e,w.d;local cu=cb.cylinder(a0,M,q*2,cb.at(A,z,cc),t.g,u.c,false)cu.CanCollide=true;cu.CanQuery=true;local
-cv=A+bk*M/2;cb.cylinder("Rim",0.1,q*1.2,cb.at(cv,z,cc),t.b,u.a,cu)cb.cylinder("Hub",0.28,q*0.55,cb.at(cv+bk*0.12,z,cc),t.c,u.b,cu)cb.cylinder("HubCap",0.12,q*0.25,cb.at(cv+bk*0.3,z,cc),t.d,u.b,cu)if k
-then cb.cylinder("TyreValve",0.2,0.12,cb.at(cv+bk*0.25,z+q*0.25,cc+q*0.12),t.e,u.b,cu)for cw=0,7 do local
-cx=cw*math.pi/4;cb.cylinder("LugNut",0.12,0.15,cb.at(cv+bk*0.1,z+q*0.42*math.cos(cx),cc+q*0.42*math.sin(cx)),t.d,u.b,cu)end end;local
-cr=cb.joint("WheelJoint",cb.chassis,cu,cb.off(A,z-w.a,cc-w.b),CFrame.new())table.insert(cb.wheels,{weld=cr,base=cr.C0,steer=ct})end;local function cy(cb)local cz=cb.chassis;local
-c1,cA,cB,cC,cD=cb.at,cb.block,cb.wedge,cb.cylinder,cb.solid;local cE,cF=w.j,w.k;local cG,cH=w.n,w.p;local cI,cJ=w.r,w.i;local cK=cJ-cI;local cL=(cJ+cI)/2;local cM=w.q-w.h;local
-cN=(w.q+w.h)/2;cA("Floor",cF*2,w.m-w.l,cJ+9.4,c1(0,(w.m+w.l)/2,(cJ-9.4)/2),t.c,u.a,cz)cA("LowerFront",cF*2,cG-w.m,cI+9.4,c1(0,(cG+w.m)/2,(cI-9.4)/2),t.b,u.a,cz)cB("LowerGlacis",cF*2,cG-w.l,2.2,c1(0,(cG+w.l)/2,-10.5)*E(180),t.b,u.a,cz)cD(cA("Bow",cE*2,w.o-cG,cM,c1(0,(w.o+cG)/2,cN),t.b,u.a,cz))cD(cB("UpperGlacis",cE*2,cH-w.o,cM,c1(0,(cH+w.o)/2,cN),t.b,u.a,cz))cA("FrontSection",cE*2,cH-cG,cI-w.q,c1(0,(cH+cG)/2,(cI+w.q)/2),t.b,u.a,cz)for
-Y,bk in ipairs({-1,1})do
-cD(cA("LowerWall",0.3,cG-w.m,cK,c1(bk*(cF-0.15),(cG+w.m)/2,cL),t.b,u.a,cz))cA("SponsonFloor",cE-cF,0.2,cK,c1(bk*(cE+cF)/2,cG+0.1,cL),t.b,u.a,cz)cD(cA("UpperWall",0.3,cH-cG,cK,c1(bk*(cE-0.15),(cH+cG)/2,cL),t.b,u.a,cz))cA("WallLiner",0.05,cG-w.m-0.1,cK-0.4,c1(bk*(cF-0.33),(cG+w.m)/2,cL),t.i,u.a,cz)cA("WallLiner",0.05,cH-cG-0.5,cK-0.4,c1(bk*(cE-0.33),(cH+cG)/2-0.1,cL),t.i,u.a,cz)cD(cA("RearPillar",cE-w.s/2,cH-cG,0.3,c1(bk*(cE+w.s/2)/2,(cH+cG)/2,cJ-0.15),t.b,u.a,cz))cD(cA("RearPillar",cF-w.s/2,cG-w.m,0.3,c1(bk*(cF+w.s/2)/2,(cG+w.m)/2,cJ-0.15),t.b,u.a,cz))end;cD(cA("Roof",cE*2,0.3,cK,c1(0,cH-0.15,cL),t.b,u.a,cz))cA("RoofLiner",cE*2-0.8,0.05,cK-0.4,c1(0,cH-0.33,cL),t.i,u.a,cz)cD(cA("RampHeader",w.s,cH-w.m-w.t,0.3,c1(0,(cH+w.m+w.t)/2,cJ-0.15),t.b,u.a,cz))cD(cA("FloorMat",cF*2-0.6,0.05,cK-0.4,c1(0,w.m+0.03,cL),t.i,u.e,cz))cD(cA("BulkheadLiner",cF*2-0.6,cH-w.m-0.6,0.05,c1(0,(cH+w.m)/2-0.1,cI+0.03),t.i,u.a,cz))for
-Y,cO in ipairs({2.5,6.5,10.0})do cA("DomeLight",0.6,0.08,0.3,c1(0,cH-0.38,cO),t.k,u.d,cz)end;for Y,cc in ipairs(w.g)do
-cC("Axle",w.f*2-w.e,0.45,c1(0,w.d,cc),t.d,u.b,cz)cA("Differential",1.2,0.9,1.0,c1(0,w.d,cc),t.d,u.b,cz)end end;local function cP(cb)local cz=cb.chassis;local c1,cA,cQ=cb.at,cb.block,cb.bolt;local
-cE=w.j;local bi=w.p-w.o;local cR=w.q-w.h;local cS=math.deg(math.atan(bi/cR))for Y,bk in ipairs({-1,1})do for cT=0,6 do local cc=-6.95+cT*2.62+1.275;for cU=0,1 do local z=3.95+cU*1.37+0.65;if not(bk>0
-and cU==0 and cT<=1)then cA("ArmourTile",0.12,1.3,2.55,c1(bk*(cE+0.06),z,cc),t.b,u.a,cz)if k then for Y,ce in ipairs({-0.45,0.45})do for Y,cf in ipairs({-1.0,1.0})do
-cQ(c1(bk*(cE+0.15),z+ce,cc+cf),cz)end end end end end end;cA("BowTile",0.12,1.4,3.6,c1(bk*(cE+0.06),4.5,-9.6),t.b,u.a,cz)if k then for Y,cf in ipairs({-1.4,0,1.4})do
-cQ(c1(bk*(cE+0.15),4.95,-9.6+cf),cz)cQ(c1(bk*(cE+0.15),4.05,-9.6+cf),cz)end end end;for cV=-1,1 do for cW=0,1 do local cc=w.h+1.2+cW*2.1;local z=w.o+bi*(cc-w.h)/cR+0.06;local
-cX=c1(cV*2.75,z,cc)*B(-cS)cA("GlacisTile",2.6,0.12,2.0,cX,t.b,u.a,cz)if k then for Y,cd in ipairs({-1.05,1.05})do for Y,cf in ipairs({-0.8,0.8})do cQ(cX*cb.off(cd,0.08,cf)*E(90),cz)end end end end end
-end;local function cY(cb)local cz=cb.chassis;local c1,cA,cC,cQ,cZ=cb.at,cb.block,cb.cylinder,cb.bolt,cb.facing;local c_,cE,cH=w.h,w.j,w.p;cA("WinchCover",2.4,1.0,0.1,c1(0,4.55,c_-0.05),t.c,u.a,cz)for
-Y,cd in ipairs({-1.0,0,1.0})do
-cQ(c1(cd,4.95,c_-0.12)*D(90),cz)cQ(c1(cd,4.15,c_-0.12)*D(90),cz)end;cA("TowEye",0.6,0.45,0.45,c1(0,3.95,c_-0.2),t.d,u.b,cz)cC("TowEyePin",0.8,0.16,c1(0,3.95,c_-0.38),t.e,u.b,cz)for Y,bk in
-ipairs({-1,1})do
-cA("HeadlightHousing",0.9,0.65,0.14,c1(bk*3.2,4.8,c_-0.07),t.e,u.a,cz)cC("Headlight",0.06,0.45,c1(bk*3.05,4.8,c_-0.15)*D(90),t.k,u.d,cz)cA("TurnSignal",0.22,0.16,0.05,c1(bk*3.52,4.95,c_-0.16),t.o,u.d,cz)cA("BlackoutLight",0.22,0.12,0.05,c1(bk*3.52,4.68,c_-0.16),t.k,u.a,cz)cA("LightCageTop",1.1,0.08,0.08,c1(bk*3.2,5.25,c_-0.45),t.c,u.b,cz)cA("LightCageBottom",1.1,0.08,0.08,c1(bk*3.2,4.35,c_-0.45),t.c,u.b,cz)for
-Y,cd in ipairs({-0.5,0.5})do
-cA("LightCageBar",0.08,0.98,0.08,c1(bk*3.2+cd,4.8,c_-0.45),t.c,u.b,cz)cA("LightCageStrut",0.08,0.08,0.4,c1(bk*3.2+cd,5.25,c_-0.25),t.c,u.b,cz)end;cA("TowHook",0.35,0.5,0.5,c1(bk*1.8,2.6,-11.0),t.d,u.b,cz)cC("ShacklePin",0.6,0.14,c1(bk*1.8,2.75,-11.2),t.e,u.b,cz)cA("MirrorArm",1.0,0.08,0.08,c1(bk*(cE+0.5),6.2,-8.2),t.e,u.b,cz)cA("MirrorArm",0.08,0.7,0.08,c1(bk*(cE+1.0),5.9,-8.2),t.e,u.b,cz)cA("Mirror",0.7,1.0,0.12,c1(bk*(cE+1.1),5.9,-8.26),t.e,u.b,cz)cA("MirrorGlass",0.58,0.88,0.03,c1(bk*(cE+1.1),5.9,-8.18),t.p,u.a,cz)cA("SmokeBracket",0.5,0.3,1.9,c1(bk*3.75,cH+0.15,-6.6),t.c,u.b,cz)for
-d0=0,3 do cC("SmokeTube",0.55,0.24,cZ(bk*3.75,cH+0.45,-7.25+d0*0.43,bk*0.4,0.5,-0.75)*D(90),t.c,u.b,cz)end end end;local function d1(cb)local cz=cb.chassis;local
-c1,cA,cC=cb.at,cb.block,cb.cylinder;local cH=w.p;local
-cd=w.z;cA("DriverHatchRing",1.9,0.12,1.9,c1(cd,cH+0.06,-6.1),t.c,u.b,cz)cA("DriverHatch",1.6,0.15,1.6,c1(cd,cH+0.18,-6.1),t.b,u.a,cz)cA("DriverHatchHinge",1.2,0.18,0.25,c1(cd,cH+0.2,-5.25),t.d,u.b,cz)cA("DriverHatchHandle",0.5,0.08,0.08,c1(cd,cH+0.3,-6.6),t.e,u.b,cz)for
-d0=-1,1 do
-cA("DriverPeriscope",0.35,0.22,0.1,c1(cd+d0*0.5,cH+0.13,-7.05),t.p,u.a,cz)cA("PeriscopeHood",0.42,0.08,0.3,c1(cd+d0*0.5,cH+0.27,-7.0),t.c,u.b,cz)end;cC("CommanderRing",0.2,2.0,c1(-1.0,cH+0.1,-3.2)*E(90),t.c,u.b,cz)cC("CommanderHatch",0.12,1.7,c1(-1.0,cH+0.25,-3.2)*E(90),t.c,u.b,cz)cA("CommanderHatchHinge",1.0,0.16,0.22,c1(-1.0,cH+0.27,-2.35),t.d,u.b,cz)cA("CommanderHatchHandle",0.5,0.08,0.08,c1(-1.0,cH+0.35,-3.6),t.e,u.b,cz)for
-Y,cx in ipairs({0,60,120,180,240,300})do local q=math.rad(cx)cA("VisionBlock",0.35,0.2,0.1,c1(-1.0+0.95*math.sin(q),cH+0.15,-3.2-0.95*math.cos(q))*D(-cx),t.p,u.a,cz)end;for Y,bk in ipairs({-1,1})do
-local
-A=bk*1.7;cA("TroopHatchFrame",3.0,0.1,3.4,c1(A,cH+0.05,5.6),t.c,u.b,cz)cA("TroopHatch",2.7,0.12,3.1,c1(A,cH+0.16,5.6),t.b,u.a,cz)cA("TroopHatchHinge",0.25,0.18,2.6,c1(A+bk*1.35,cH+0.2,5.6),t.d,u.b,cz)cA("TroopHatchHandle",0.08,0.08,0.6,c1(A-bk*0.9,cH+0.26,5.6),t.e,u.b,cz)cA("TroopHatchLatch",0.3,0.1,0.2,c1(A-bk*1.15,cH+0.22,4.4),t.e,u.b,cz)cA("TroopHatchVision",0.45,0.14,0.12,c1(A,cH+0.25,4.15),t.p,u.a,cz)end;cA("IntakeGrille",2.4,0.06,2.6,c1(2.2,cH+0.03,-4.4),t.e,u.b,cz)for
-d0=0,6 do cA("IntakeSlat",2.2,0.06,0.12,c1(2.2,cH+0.07,-5.5+d0*0.36),t.c,u.b,cz)end;for Y,bk in ipairs({-1,1})do
-cA("RackRail",0.1,0.1,10.2,c1(bk*3.95,cH+0.75,5.6),t.e,u.b,cz)cA("RackRail",0.1,0.1,10.2,c1(bk*3.95,cH+0.3,5.6),t.e,u.b,cz)for Y,d2 in ipairs({0.6,3.1,5.6,8.1,10.6})do
-cA("RackPost",0.1,0.8,0.1,c1(bk*3.95,cH+0.4,d2),t.e,u.b,cz)end;cA("Rucksack",0.9,0.9,1.1,c1(bk*3.4,cH+0.45,1.8),t.h,u.e,cz)cA("Rucksack",0.9,0.8,1.0,c1(bk*3.4,cH+0.4,3.2),t.n,u.e,cz)cC("Bedroll",1.6,0.6,c1(bk*3.4,cH+0.3,8.8)*D(90),t.h,u.e,cz)cA("AmmoCan",0.4,0.5,0.8,c1(bk*3.5,cH+0.25,10.2),t.h,u.b,cz)for
-Y,d3 in ipairs({-5.4,-2.2})do
-cA("GrabHandle",0.08,0.08,0.8,c1(bk*4.1,cH+0.22,d3),t.c,u.b,cz)cA("GrabHandlePost",0.08,0.2,0.08,c1(bk*4.1,cH+0.1,d3-0.36),t.c,u.b,cz)cA("GrabHandlePost",0.08,0.2,0.08,c1(bk*4.1,cH+0.1,d3+0.36),t.c,u.b,cz)end;cC("AntennaBase",0.3,0.3,c1(bk*3.6,cH+0.15,11.1)*E(90),t.e,u.b,cz)cC("AntennaSpring",0.35,0.16,c1(bk*3.6,cH+0.47,11.1)*E(90),t.e,u.b,cz)cC("Antenna",6.0,0.07,c1(bk*3.6,cH+3.65,11.1)*E(90),t.e,u.b,cz)end;cC("AntennaBase",0.3,0.3,c1(-3.6,cH+0.15,-1.6)*E(90),t.e,u.b,cz)cC("Antenna",4.5,0.07,c1(-3.6,cH+2.55,-1.6)*E(90),t.e,u.b,cz)cC("GPSDome",0.25,0.7,c1(0,cH+0.12,9.8)*E(90),t.b,u.a,cz)cC("JammerMast",1.2,0.15,c1(-2.2,cH+0.6,10.3)*E(90),t.e,u.b,cz)cA("JammerPaddle",0.1,1.2,0.6,c1(-2.2,cH+1.7,10.3),t.e,u.a,cz)end;local
-function d4(cb)local cz=cb.chassis;local c1,cA,cC=cb.at,cb.block,cb.cylinder;local cE=w.j;cA("ExhaustGrille",0.08,1.2,4.8,c1(cE+0.04,4.6,-4.4),t.e,u.b,cz)for d0=0,4 do
-cA("GrilleSlat",0.1,0.1,4.6,c1(cE+0.08,4.1+d0*0.25,-4.4),t.c,u.b,cz)end;cC("ExhaustOutlet",0.45,0.4,c1(cE+0.2,4.4,-1.9),t.d,u.b,cz)cC("FuelFiller",0.12,0.5,c1(cE+0.08,6.0,-7.5),t.c,u.b,cz)for Y,bk in
-ipairs({-1,1})do
-cA("SideStep",0.7,0.1,0.9,c1(bk*(cE+0.3),3.55,-0.4),t.d,u.b,cz)cA("StepHanger",0.08,0.4,0.9,c1(bk*(cE+0.62),3.75,-0.4),t.d,u.b,cz)cA("GrabBar",0.08,1.2,0.08,c1(bk*(cE+0.3),5.6,-0.4),t.c,u.b,cz)cA("GrabBarMount",0.2,0.08,0.08,c1(bk*(cE+0.22),6.2,-0.4),t.c,u.b,cz)cA("GrabBarMount",0.2,0.08,0.08,c1(bk*(cE+0.22),5.0,-0.4),t.c,u.b,cz)cA("Mudflap",1.3,1.6,0.06,c1(bk*w.f,1.7,-0.7),t.g,u.c,cz)cA("Mudflap",1.3,1.8,0.06,c1(bk*w.f,1.6,8.1),t.g,u.c,cz)end;local
-d5=-(cE+0.3)cC("ShovelHandle",3.0,0.14,c1(d5,4.3,7.4)*D(90),t.c,u.e,cz)cA("ShovelBlade",0.08,0.7,0.8,c1(d5,4.3,9.3),t.d,u.b,cz)cC("PickHandle",2.8,0.14,c1(d5,4.75,7.2)*D(90),t.c,u.e,cz)cA("PickHead",0.1,1.2,0.2,c1(d5,4.75,5.75),t.d,u.b,cz)for
-Y,cI in ipairs({6.2,8.3})do
-cA("ToolBracket",0.3,0.8,0.12,c1(-(cE+0.18),4.5,cI),t.e,u.b,cz)end;cC("Extinguisher",1.0,0.35,c1(-(cE+0.25),4.6,-7.4)*E(90),t.l,u.a,cz)cA("ExtinguisherStrap",0.45,0.1,0.45,c1(-(cE+0.25),4.8,-7.4),t.e,u.b,cz)end;local
-function d6(cb)local cz=cb.chassis;local c1,cA,cC=cb.at,cb.block,cb.cylinder;local cJ,cH=w.i,w.p;for Y,bk in ipairs({-1,1})do
-cA("TaillightHousing",0.9,0.7,0.1,c1(bk*3.55,4.6,cJ+0.05),t.e,u.a,cz)cA("Taillight",0.3,0.22,0.05,c1(bk*3.72,4.72,cJ+0.11),t.l,u.d,cz)cA("TurnSignal",0.22,0.16,0.05,c1(bk*3.4,4.72,cJ+0.11),t.o,u.d,cz)cA("BlackoutTaillight",0.25,0.1,0.05,c1(bk*3.55,4.42,cJ+0.11),t.m,u.a,cz)cA("LightGuard",1.1,0.08,0.08,c1(bk*3.55,5.05,cJ+0.35),t.c,u.b,cz)for
-Y,ad in ipairs({-0.5,0.5})do cA("LightGuardPost",0.08,0.5,0.3,c1(bk*3.55+ad,4.82,cJ+0.2),t.c,u.b,cz)end;cA("CanRack",1.4,0.1,0.7,c1(bk*3.4,3.95,cJ+0.4),t.d,u.b,cz)for d0=0,1 do
-cA("Jerrycan",0.55,1.1,0.6,c1(bk*(3.1+d0*0.6),4.55,cJ+0.4),t.h,u.b,cz)end;cA("CanStrap",1.3,0.08,0.1,c1(bk*3.4,4.85,cJ+0.72),t.e,u.e,cz)cA("RearShackle",0.35,0.45,0.4,c1(bk*1.9,1.5,cJ+0.2),t.d,u.b,cz)cA("Reflector",0.2,0.2,0.04,c1(bk*4.1,3.85,cJ+0.03),t.l,u.a,cz)end;cA("TowPintle",0.5,0.45,0.4,c1(0,1.5,cJ+0.2),t.d,u.b,cz)cA("PintleHook",0.18,0.35,0.25,c1(0,1.3,cJ+0.45),t.e,u.b,cz)cA("RearCamera",0.4,0.3,0.3,c1(0,cH-0.2,cJ+0.18),t.e,u.a,cz)cC("RearCameraLens",0.05,0.18,c1(0,cH-0.2,cJ+0.35)*D(90),t.p,u.a,cz)cA("IdPanel",1.2,0.45,0.04,c1(3.4,6.2,cJ+0.03),t.e,u.a,cz)end;local
-function d7(cb)local M,d8=w.s,w.t;local d9,da=w.m,w.i-0.15;local db=cb.off(0,d9-w.a,da-w.b)local cq=CFrame.new(0,-d8/2*b,0)local dc=cb.at(0,d9+d8/2,da)local
-dd=cb.solid(cb.block("Ramp",M,d8,0.3,dc,t.b,u.a,false))cb.block("RampLiner",M-0.3,d8-0.3,0.05,dc*cb.off(0,0,-0.17),t.i,u.a,dd)cb.block("RampDoor",1.8,3.1,0.05,dc*cb.off(0.6,-0.05,0.17),t.b,u.a,dd)cb.block("RampDoorSeam",1.9,0.06,0.04,dc*cb.off(0.6,1.55,0.2),t.e,u.a,dd)cb.block("RampDoorSeam",0.06,3.2,0.04,dc*cb.off(-0.33,-0.05,0.2),t.e,u.a,dd)cb.block("RampDoorSeam",0.06,3.2,0.04,dc*cb.off(1.55,-0.05,0.2),t.e,u.a,dd)for
-Y,ce in ipairs({-1.0,1.0})do
-cb.block("RampDoorHinge",0.15,0.4,0.12,dc*cb.off(-0.38,ce,0.24),t.d,u.b,dd)end;cb.block("RampVisionBlock",0.4,0.25,0.06,dc*cb.off(0.6,1.1,0.2),t.p,u.a,dd)cb.block("RampHandle",0.1,0.5,0.1,dc*cb.off(1.25,0.2,0.24),t.e,u.b,dd)cb.block("RampHinge",M-0.4,0.25,0.25,dc*cb.off(0,-d8/2+0.12,0.18),t.d,u.b,dd)for
-Y,cd in ipairs({-2.1,2.1})do cb.block("RampLock",0.3,0.3,0.12,dc*cb.off(cd,d8/2-0.3,0.2),t.e,u.b,dd)end;for d0=0,3 do
-cb.block("RampTread",M-0.8,0.08,0.06,dc*cb.off(0,-1.5+d0*0.9,-0.21),t.d,u.b,dd)end;local cr=cb.joint("RampJoint",cb.chassis,dd,db,cq)cb.ramp={weld=cr,base=db}end;local function de(cb)local
-cz=cb.chassis;local A,cc,cH,df=w.v,w.w,w.p,w.x;local cA,cC,c1=cb.block,cb.cylinder,cb.at;cC("RwsBase",0.4,2.2,c1(A,cH+0.2,cc)*E(90),t.c,u.b,cz)if k then for s=0,7 do local
-cx=s*math.pi/4;cb.bolt(c1(A+0.95*math.cos(cx),cH+0.42,cc+0.95*math.sin(cx))*E(90),cz)end end;local dg=cA("RwsMount",0.3,0.3,0.3,c1(A,cH+0.4,cc),t.e,u.a,false)dg.Transparency=1;local
-dh=cb.joint("RwsYawWeld",cz,dg,cb.off(A,cH+0.4-w.a,cc-w.b),CFrame.new())local di=df-cH-1.0;local
-dj=cA("RwsPedestal",1.1,di,1.1,c1(A,cH+0.4+di/2,cc+0.1),t.b,u.a,dg)cA("RwsCable",0.2,di,0.2,c1(A-0.4,cH+0.4+di/2,cc+0.7),t.e,u.c,dg)cA("RwsJunctionBox",0.6,0.5,0.4,c1(A+0.55,cH+0.9,cc+0.5),t.c,u.a,dg)for
-Y,bk in ipairs({-1,1})do cA("RwsYoke",0.2,1.3,1.0,c1(A+bk*0.75,df-0.3,cc+0.1),t.c,u.b,dg)for d0=0,3 do
-cC("RwsSmokeTube",0.45,0.2,cb.facing(A+bk*0.8,cH+0.85+d0*0.24,cc-0.35,bk*0.5,0.4,-0.75)*D(90),t.c,u.b,dg)end end;local
-dk={}table.insert(dk,cA("RwsAmmoCan",0.6,0.8,1.1,c1(A-1.15,df-0.35,cc+0.1),t.h,u.b,dg))cA("RwsAmmoLid",0.62,0.08,1.12,c1(A-1.15,df+0.07,cc+0.1),t.h,u.b,dg)cA("RwsFeedChute",0.35,0.2,0.6,c1(A-0.6,df-0.05,cc+0.1),t.e,u.b,dg)local
-dl=cA("RwsCradle",0.3,0.3,0.3,c1(A,df,cc),t.e,u.a,false)dl.Transparency=1;local
-dm=cb.joint("RwsPitchWeld",dg,dl,cb.off(0,df-cH-0.4,0),CFrame.new())table.insert(dk,dj)table.insert(dk,cA("RwsReceiver",0.45,0.55,1.8,c1(A,df,cc+0.2),t.f,u.b,dl))cA("RwsFeedCover",0.47,0.08,1.1,c1(A,df+0.31,cc+0.05),t.f,u.b,dl)cA("RwsChargingHandle",0.3,0.08,0.08,c1(A+0.3,df+0.1,cc+0.6),t.e,u.b,dl)table.insert(dk,cC("RwsJacket",0.8,0.3,c1(A,df,cc-1.1)*D(90),t.f,u.b,dl))if
-k then for d0=0,2 do cC("RwsJacketHole",0.02,0.1,c1(A+0.15,df,cc-0.85-d0*0.22),t.e,u.a,dl)end
-end;table.insert(dk,cC("RwsBarrel",3.2,0.16,c1(A,df,cc-3.1)*D(90),t.f,u.b,dl))cA("RwsCarryHandle",0.08,0.08,0.5,c1(A,df+0.35,cc-1.55),t.f,u.b,dl)for Y,cf in ipairs({-0.22,0.22})do
-cA("RwsCarryHandlePost",0.08,0.25,0.08,c1(A,df+0.2,cc-1.55+cf),t.f,u.b,dl)end;cA("RwsFrontSight",0.06,0.2,0.06,c1(A,df+0.15,cc-4.5),t.f,u.b,dl)table.insert(dk,cC("RwsFlashHider",0.3,0.24,c1(A,df,cc-4.8)*D(90),t.f,u.b,dl))table.insert(dk,cA("RwsSight",0.8,0.8,1.2,c1(A+1.3,df+0.1,cc-0.1),t.b,u.a,dl))cA("RwsSightArm",0.6,0.25,0.4,c1(A+0.75,df,cc-0.1),t.c,u.b,dl)cA("RwsSunshade",0.9,0.06,0.45,c1(A+1.3,df+0.53,cc-0.8),t.c,u.b,dl)cC("RwsDayCamera",0.05,0.34,c1(A+1.12,df+0.25,cc-0.72)*D(90),t.p,u.a,dl)cA("RwsThermal",0.3,0.28,0.05,c1(A+1.48,df+0.25,cc-0.72),t.e,u.a,dl)cC("RwsLaser",0.05,0.16,c1(A+1.3,df-0.12,cc-0.72)*D(90),t.p,u.a,dl)for
-Y,Z in ipairs(dk)do Z.CanQuery=true end;cb.rws={yaw=dh,yawBase=dh.C0,pitch=dm,pitchBase=dm.C0,cradle=dl,trigger=dk}end;local function dn(cb)local cz=cb.chassis;local c1,cA=cb.at,cb.block;local
-cH,cI=w.p,w.r;for Y,bk in ipairs({-1,1})do cA("BenchFrame",0.9,0.3,8.6,c1(bk*w.ad,2.55,6.0),t.d,u.b,cz)for Y,cO in ipairs({2.0,6.0,10.0})do
-cA("BenchLeg",0.12,0.35,0.12,c1(bk*(w.ad-0.3),2.22,cO),t.d,u.b,cz)end;cA("BenchBack",0.2,1.8,8.6,c1(bk*2.5,3.9,6.0),t.j,u.e,cz)for Y,cc in ipairs(w.ae)do
-cA("SeatBelt",0.05,1.6,0.12,c1(bk*2.38,3.9,cc+0.3),t.e,u.e,cz)cA("SeatDivider",0.5,0.5,0.06,c1(bk*2.3,3.2,cc+1.2),t.d,u.b,cz)end;cA("Handrail",0.1,0.1,10.0,c1(bk*1.2,cH-0.55,5.8),t.d,u.b,cz)for Y,d3
-in ipairs({1.2,5.8,10.4})do cA("HandrailBracket",0.08,0.2,0.08,c1(bk*1.2,cH-0.43,d3),t.d,u.b,cz)end;for Y,cW in ipairs({3.6,8.4})do cA("Intercom",0.12,0.35,0.3,c1(bk*2.62,5.3,cW),t.e,u.a,cz)end
-end;cA("FirstAidKit",0.8,0.6,0.25,c1(1.6,5.2,cI+0.18),t.h,u.e,cz)cA("FirstAidCross",0.45,0.12,0.02,c1(1.6,5.2,cI+0.31),t.l,u.a,cz)cA("FirstAidCross",0.12,0.45,0.02,c1(1.6,5.2,cI+0.31),t.l,u.a,cz)for
-d0=0,1 do cA("WaterCan",0.35,0.7,0.55,c1(-1.9+d0*0.45,2.45,cI+0.45),t.b,u.a,cz)end;cA("RifleRack",1.4,0.1,0.3,c1(-1.6,4.6,cI+0.2),t.e,u.b,cz)end;local function dp(cb)local cz=cb.chassis;local
-z=w.y;local dq=cb.seat("VehicleSeat","DriverSeat",cb.at(w.z,z,w.aa),cz)dq.MaxSpeed=0;dq.Torque=0;dq.TurnSpeed=0;dq.HeadsUpDisplay=false;local
-dr=cb.seat("VehicleSeat","CommanderSeat",cb.at(w.ab,z,w.ac),cz)dr.MaxSpeed=0;dr.Torque=0;dr.TurnSpeed=0;dr.HeadsUpDisplay=false;cb.driverSeat=dq;cb.commanderSeat=dr;for Y,bk in ipairs({-1,1})do for
-Y,cc in ipairs(w.ae)do table.insert(cb.troopSeats,cb.seat("Seat","TroopSeat",cb.at(bk*w.ad,z,cc)*D(90*bk),cz))end
-end;table.insert(cb.troopSeats,cb.seat("Seat","TroopSeat",cb.at(0,z,w.r+1.2)*D(180),cz))cb.block("TroopSeatBack",1.4,1.8,0.2,cb.at(0,z+1.1,w.r+0.5),t.j,u.e,cz)end;local function ds(dt,du)if
-dt=="driver"then return Vector3.new(-(w.j+3),2.4,w.aa)end;if dt=="commander"then return Vector3.new(w.j+3,2.4,w.ac)end;return Vector3.new((du%3-1)*2.5,2.4,w.i+4+math.floor(du/3)*2)end;local function
-dv(dw,dx,dy)if dw<dx then return math.min(dx,dw+dy)end;return math.max(dx,dw-dy)end;local function dz(av)local a7=U()local dA={}for Y,dB in ipairs(av.allSeats)do local a0=a5(dB.seat,a7)if not a0 and
-dB.name then local aw=false;pcall(function()aw=dB.seat.Occupant~=nil end)if aw then a0=dB.name end end;if a0~=dB.name then local dC=dB.name;dB.name=a0;if a0 then if dB.role=="driver"then
-R("Stryker: W/S drive, A/D steer. F at the back lowers or raises the ramp. Space gets you out.",a0)elseif dB.role=="commander"then
+cb.at(A,z,cc)return ca*CFrame.new(A*b,z*b,cc*b)end;function cb.off(A,z,cc)return CFrame.new(A*b,z*b,cc*b)end;function cb.facing(A,z,cc,cd,ce,cf)local Z=Vector3.new(A,z,cc)*b;return ca*CFrame.new(Z,
+Z+Vector3.new(cd,ce,cf))end;function cb.make(cg,a0,b8,a1,b9,ch,ci,cj)if av.dead or not c0.Parent then error("removed while it was being built",0)end;local Z=Instance.new(cg)Z.Name=a0;if cj then
+Z.Shape=cj end;Z.Size=b8*b;Z.CFrame=a1;Z.Color=b9;Z.Material=ch;Z.Anchored=true;Z.CanCollide=false;Z.CanTouch=false;Z.CanQuery=false;Z.Massless=true;N(Z,c0)av.own[Z]=true;
+pcall(function()Z:SetAttribute("StrykerKey",av.key)Z:SetAttribute("StrykerBuild",av.build)end)if ci then J(ci,Z)end;table.insert(cb.parts,Z)if#cb.parts%25==0 then task.wait(0.03)end;return Z end;
+function cb.block(a0,ck,cl,cm,a1,b9,ch,ci)return cb.make("Part",a0,Vector3.new(ck,cl,cm),a1,b9,ch,ci,false)end;function cb.wedge(a0,ck,cl,cm,a1,b9,ch,ci)return cb.make("WedgePart",a0,Vector3.new(ck,
+cl,cm),a1,b9,ch,ci,false)end;function cb.cylinder(a0,cn,co,a1,b9,ch,ci)return cb.make("Part",a0,Vector3.new(cn,co,co),a1,b9,ch,ci,v.a)end;function cb.bolt(a1,ci)if not k then return nil end;return
+cb.cylinder("Bolt",0.06,0.16,a1,t.c,u.b,ci)end;function cb.solid(Z)Z.CanCollide=true;Z.CanQuery=true;return Z end;function cb.seat(cg,a0,a1,ci)local bk=cb.make(cg,a0,Vector3.new(1.5,0.4,1.4),a1,t.j,
+u.e,ci,false)bk.CanCollide=true;bk.CanTouch=true;bk.CanQuery=true;return bk end;function cb.anchor(a0,A,z,cc,ci)local Z=cb.block(a0,1.6,2.4,1.6,cb.at(A,z,cc),t.e,u.a,ci)Z.Transparency=1;
+Z.CanQuery=true;return Z end;function cb.joint(a0,K,L,cp,cq)local cr=Instance.new("Weld")cr.Name=a0;cr.Part0=K;cr.Part1=L;cr.C0=cp;cr.C1=cq;cr.Parent=K;return cr end;return cb end;local function
+cs(cb,a0,A,cc,ct)local bk=1;if A<0 then bk=-1 end;local q,M,z=w.d,w.e,w.d;local cu=cb.cylinder(a0,M,q*2,cb.at(A,z,cc),t.g,u.c,false)cu.CanCollide=true;cu.CanQuery=true;local cv=A+bk*M/2;
+cb.cylinder("Rim",0.1,q*1.2,cb.at(cv,z,cc),t.b,u.a,cu)cb.cylinder("Hub",0.28,q*0.55,cb.at(cv+bk*0.12,z,cc),t.c,u.b,cu)cb.cylinder("HubCap",0.12,q*0.25,cb.at(cv+bk*0.3,z,cc),t.d,u.b,cu)if k then
+cb.cylinder("TyreValve",0.2,0.12,cb.at(cv+bk*0.25,z+q*0.25,cc+q*0.12),t.e,u.b,cu)for cw=0,7 do local cx=cw*math.pi/4;cb.cylinder("LugNut",0.12,0.15,cb.at(cv+bk*0.1,z+q*0.42*math.cos(cx),
+cc+q*0.42*math.sin(cx)),t.d,u.b,cu)end end;local cr=cb.joint("WheelJoint",cb.chassis,cu,cb.off(A,z-w.a,cc-w.b),CFrame.new())table.insert(cb.wheels,{weld=cr,base=cr.C0,steer=ct})end;local function
+cy(cb)local cz=cb.chassis;local c1,cA,cB,cC,cD=cb.at,cb.block,cb.wedge,cb.cylinder,cb.solid;local cE,cF=w.j,w.k;local cG,cH=w.n,w.p;local cI,cJ=w.r,w.i;local cK=cJ-cI;local cL=(cJ+cI)/2;local
+cM=w.q-w.h;local cN=(w.q+w.h)/2;cA("Floor",cF*2,w.m-w.l,cJ+9.4,c1(0,(w.m+w.l)/2,(cJ-9.4)/2),t.c,u.a,cz)cA("LowerFront",cF*2,cG-w.m,cI+9.4,c1(0,(cG+w.m)/2,(cI-9.4)/2),t.b,u.a,cz)cB("LowerGlacis",cF*2,
+cG-w.l,2.2,c1(0,(cG+w.l)/2,-10.5)*E(180),t.b,u.a,cz)cD(cA("Bow",cE*2,w.o-cG,cM,c1(0,(w.o+cG)/2,cN),t.b,u.a,cz))cD(cB("UpperGlacis",cE*2,cH-w.o,cM,c1(0,(cH+w.o)/2,cN),t.b,u.a,cz))cA("FrontSection",
+cE*2,cH-cG,cI-w.q,c1(0,(cH+cG)/2,(cI+w.q)/2),t.b,u.a,cz)for Y,bk in ipairs({-1,1})do cD(cA("LowerWall",0.3,cG-w.m,cK,c1(bk*(cF-0.15),(cG+w.m)/2,cL),t.b,u.a,cz))cA("SponsonFloor",cE-cF,0.2,cK,
+c1(bk*(cE+cF)/2,cG+0.1,cL),t.b,u.a,cz)cD(cA("UpperWall",0.3,cH-cG,cK,c1(bk*(cE-0.15),(cH+cG)/2,cL),t.b,u.a,cz))cA("WallLiner",0.05,cG-w.m-0.1,cK-0.4,c1(bk*(cF-0.33),(cG+w.m)/2,cL),t.i,u.a,
+cz)cA("WallLiner",0.05,cH-cG-0.5,cK-0.4,c1(bk*(cE-0.33),(cH+cG)/2-0.1,cL),t.i,u.a,cz)cD(cA("RearPillar",cE-w.s/2,cH-cG,0.3,c1(bk*(cE+w.s/2)/2,(cH+cG)/2,cJ-0.15),t.b,u.a,cz))cD(cA("RearPillar",
+cF-w.s/2,cG-w.m,0.3,c1(bk*(cF+w.s/2)/2,(cG+w.m)/2,cJ-0.15),t.b,u.a,cz))end;cD(cA("Roof",cE*2,0.3,cK,c1(0,cH-0.15,cL),t.b,u.a,cz))cA("RoofLiner",cE*2-0.8,0.05,cK-0.4,c1(0,cH-0.33,cL),t.i,u.a,
+cz)cD(cA("RampHeader",w.s,cH-w.m-w.t,0.3,c1(0,(cH+w.m+w.t)/2,cJ-0.15),t.b,u.a,cz))cD(cA("FloorMat",cF*2-0.6,0.05,cK-0.4,c1(0,w.m+0.03,cL),t.i,u.e,cz))cD(cA("BulkheadLiner",cF*2-0.6,cH-w.m-0.6,0.05,
+c1(0,(cH+w.m)/2-0.1,cI+0.03),t.i,u.a,cz))for Y,cO in ipairs({2.5,6.5,10.0})do cA("DomeLight",0.6,0.08,0.3,c1(0,cH-0.38,cO),t.k,u.d,cz)end;for Y,cc in ipairs(w.g)do cC("Axle",w.f*2-w.e,0.45,c1(0,w.d,
+cc),t.d,u.b,cz)cA("Differential",1.2,0.9,1.0,c1(0,w.d,cc),t.d,u.b,cz)end end;local function cP(cb)local cz=cb.chassis;local c1,cA,cQ=cb.at,cb.block,cb.bolt;local cE=w.j;local bi=w.p-w.o;local
+cR=w.q-w.h;local cS=math.deg(math.atan(bi/cR))for Y,bk in ipairs({-1,1})do for cT=0,6 do local cc=-6.95+cT*2.62+1.275;for cU=0,1 do local z=3.95+cU*1.37+0.65;if not(bk>0 and cU==0 and cT<=1)then
+cA("ArmourTile",0.12,1.3,2.55,c1(bk*(cE+0.06),z,cc),t.b,u.a,cz)if k then for Y,ce in ipairs({-0.45,0.45})do for Y,cf in ipairs({-1.0,1.0})do cQ(c1(bk*(cE+0.15),z+ce,cc+cf),cz)end end end end end end;
+cA("BowTile",0.12,1.4,3.6,c1(bk*(cE+0.06),4.5,-9.6),t.b,u.a,cz)if k then for Y,cf in ipairs({-1.4,0,1.4})do cQ(c1(bk*(cE+0.15),4.95,-9.6+cf),cz)cQ(c1(bk*(cE+0.15),4.05,-9.6+cf),cz)end end end;for
+cV=-1,1 do for cW=0,1 do local cc=w.h+1.2+cW*2.1;local z=w.o+bi*(cc-w.h)/cR+0.06;local cX=c1(cV*2.75,z,cc)*B(-cS)cA("GlacisTile",2.6,0.12,2.0,cX,t.b,u.a,cz)if k then for Y,cd in ipairs({-1.05,
+1.05})do for Y,cf in ipairs({-0.8,0.8})do cQ(cX*cb.off(cd,0.08,cf)*E(90),cz)end end end end end end;local function cY(cb)local cz=cb.chassis;local c1,cA,cC,cQ,cZ=cb.at,cb.block,cb.cylinder,cb.bolt,
+cb.facing;local c_,cE,cH=w.h,w.j,w.p;cA("WinchCover",2.4,1.0,0.1,c1(0,4.55,c_-0.05),t.c,u.a,cz)for Y,cd in ipairs({-1.0,0,1.0})do cQ(c1(cd,4.95,c_-0.12)*D(90),cz)cQ(c1(cd,4.15,c_-0.12)*D(90),cz)end;
+cA("TowEye",0.6,0.45,0.45,c1(0,3.95,c_-0.2),t.d,u.b,cz)cC("TowEyePin",0.8,0.16,c1(0,3.95,c_-0.38),t.e,u.b,cz)for Y,bk in ipairs({-1,1})do cA("HeadlightHousing",0.9,0.65,0.14,c1(bk*3.2,4.8,c_-0.07),
+t.e,u.a,cz)cC("Headlight",0.06,0.45,c1(bk*3.05,4.8,c_-0.15)*D(90),t.k,u.d,cz)cA("TurnSignal",0.22,0.16,0.05,c1(bk*3.52,4.95,c_-0.16),t.o,u.d,cz)cA("BlackoutLight",0.22,0.12,0.05,c1(bk*3.52,4.68,
+c_-0.16),t.k,u.a,cz)cA("LightCageTop",1.1,0.08,0.08,c1(bk*3.2,5.25,c_-0.45),t.c,u.b,cz)cA("LightCageBottom",1.1,0.08,0.08,c1(bk*3.2,4.35,c_-0.45),t.c,u.b,cz)for Y,cd in ipairs({-0.5,0.5})do
+cA("LightCageBar",0.08,0.98,0.08,c1(bk*3.2+cd,4.8,c_-0.45),t.c,u.b,cz)cA("LightCageStrut",0.08,0.08,0.4,c1(bk*3.2+cd,5.25,c_-0.25),t.c,u.b,cz)end;cA("TowHook",0.35,0.5,0.5,c1(bk*1.8,2.6,-11.0),t.d,
+u.b,cz)cC("ShacklePin",0.6,0.14,c1(bk*1.8,2.75,-11.2),t.e,u.b,cz)cA("MirrorArm",1.0,0.08,0.08,c1(bk*(cE+0.5),6.2,-8.2),t.e,u.b,cz)cA("MirrorArm",0.08,0.7,0.08,c1(bk*(cE+1.0),5.9,-8.2),t.e,u.b,
+cz)cA("Mirror",0.7,1.0,0.12,c1(bk*(cE+1.1),5.9,-8.26),t.e,u.b,cz)cA("MirrorGlass",0.58,0.88,0.03,c1(bk*(cE+1.1),5.9,-8.18),t.p,u.a,cz)cA("SmokeBracket",0.5,0.3,1.9,c1(bk*3.75,cH+0.15,-6.6),t.c,u.b,
+cz)for d0=0,3 do cC("SmokeTube",0.55,0.24,cZ(bk*3.75,cH+0.45,-7.25+d0*0.43,bk*0.4,0.5,-0.75)*D(90),t.c,u.b,cz)end end end;local function d1(cb)local cz=cb.chassis;local c1,cA,cC=cb.at,cb.block,
+cb.cylinder;local cH=w.p;local cd=w.z;cA("DriverHatchRing",1.9,0.12,1.9,c1(cd,cH+0.06,-6.1),t.c,u.b,cz)cA("DriverHatch",1.6,0.15,1.6,c1(cd,cH+0.18,-6.1),t.b,u.a,cz)cA("DriverHatchHinge",1.2,0.18,
+0.25,c1(cd,cH+0.2,-5.25),t.d,u.b,cz)cA("DriverHatchHandle",0.5,0.08,0.08,c1(cd,cH+0.3,-6.6),t.e,u.b,cz)for d0=-1,1 do cA("DriverPeriscope",0.35,0.22,0.1,c1(cd+d0*0.5,cH+0.13,-7.05),t.p,u.a,
+cz)cA("PeriscopeHood",0.42,0.08,0.3,c1(cd+d0*0.5,cH+0.27,-7.0),t.c,u.b,cz)end;cC("CommanderRing",0.2,2.0,c1(-1.0,cH+0.1,-3.2)*E(90),t.c,u.b,cz)cC("CommanderHatch",0.12,1.7,c1(-1.0,cH+0.25,
+-3.2)*E(90),t.c,u.b,cz)cA("CommanderHatchHinge",1.0,0.16,0.22,c1(-1.0,cH+0.27,-2.35),t.d,u.b,cz)cA("CommanderHatchHandle",0.5,0.08,0.08,c1(-1.0,cH+0.35,-3.6),t.e,u.b,cz)for Y,cx in ipairs({0,60,120,
+180,240,300})do local q=math.rad(cx)cA("VisionBlock",0.35,0.2,0.1,c1(-1.0+0.95*math.sin(q),cH+0.15,-3.2-0.95*math.cos(q))*D(-cx),t.p,u.a,cz)end;for Y,bk in ipairs({-1,1})do local A=bk*1.7;
+cA("TroopHatchFrame",3.0,0.1,3.4,c1(A,cH+0.05,5.6),t.c,u.b,cz)cA("TroopHatch",2.7,0.12,3.1,c1(A,cH+0.16,5.6),t.b,u.a,cz)cA("TroopHatchHinge",0.25,0.18,2.6,c1(A+bk*1.35,cH+0.2,5.6),t.d,u.b,
+cz)cA("TroopHatchHandle",0.08,0.08,0.6,c1(A-bk*0.9,cH+0.26,5.6),t.e,u.b,cz)cA("TroopHatchLatch",0.3,0.1,0.2,c1(A-bk*1.15,cH+0.22,4.4),t.e,u.b,cz)cA("TroopHatchVision",0.45,0.14,0.12,c1(A,cH+0.25,
+4.15),t.p,u.a,cz)end;cA("IntakeGrille",2.4,0.06,2.6,c1(2.2,cH+0.03,-4.4),t.e,u.b,cz)for d0=0,6 do cA("IntakeSlat",2.2,0.06,0.12,c1(2.2,cH+0.07,-5.5+d0*0.36),t.c,u.b,cz)end;for Y,bk in ipairs({-1,
+1})do cA("RackRail",0.1,0.1,10.2,c1(bk*3.95,cH+0.75,5.6),t.e,u.b,cz)cA("RackRail",0.1,0.1,10.2,c1(bk*3.95,cH+0.3,5.6),t.e,u.b,cz)for Y,d2 in ipairs({0.6,3.1,5.6,8.1,10.6})do cA("RackPost",0.1,0.8,
+0.1,c1(bk*3.95,cH+0.4,d2),t.e,u.b,cz)end;cA("Rucksack",0.9,0.9,1.1,c1(bk*3.4,cH+0.45,1.8),t.h,u.e,cz)cA("Rucksack",0.9,0.8,1.0,c1(bk*3.4,cH+0.4,3.2),t.n,u.e,cz)cC("Bedroll",1.6,0.6,c1(bk*3.4,cH+0.3,
+8.8)*D(90),t.h,u.e,cz)cA("AmmoCan",0.4,0.5,0.8,c1(bk*3.5,cH+0.25,10.2),t.h,u.b,cz)for Y,d3 in ipairs({-5.4,-2.2})do cA("GrabHandle",0.08,0.08,0.8,c1(bk*4.1,cH+0.22,d3),t.c,u.b,cz)cA("GrabHandlePost",
+0.08,0.2,0.08,c1(bk*4.1,cH+0.1,d3-0.36),t.c,u.b,cz)cA("GrabHandlePost",0.08,0.2,0.08,c1(bk*4.1,cH+0.1,d3+0.36),t.c,u.b,cz)end;cC("AntennaBase",0.3,0.3,c1(bk*3.6,cH+0.15,11.1)*E(90),t.e,u.b,
+cz)cC("AntennaSpring",0.35,0.16,c1(bk*3.6,cH+0.47,11.1)*E(90),t.e,u.b,cz)cC("Antenna",6.0,0.07,c1(bk*3.6,cH+3.65,11.1)*E(90),t.e,u.b,cz)end;cC("AntennaBase",0.3,0.3,c1(-3.6,cH+0.15,-1.6)*E(90),t.e,
+u.b,cz)cC("Antenna",4.5,0.07,c1(-3.6,cH+2.55,-1.6)*E(90),t.e,u.b,cz)cC("GPSDome",0.25,0.7,c1(0,cH+0.12,9.8)*E(90),t.b,u.a,cz)cC("JammerMast",1.2,0.15,c1(-2.2,cH+0.6,10.3)*E(90),t.e,u.b,
+cz)cA("JammerPaddle",0.1,1.2,0.6,c1(-2.2,cH+1.7,10.3),t.e,u.a,cz)end;local function d4(cb)local cz=cb.chassis;local c1,cA,cC=cb.at,cb.block,cb.cylinder;local cE=w.j;cA("ExhaustGrille",0.08,1.2,4.8,
+c1(cE+0.04,4.6,-4.4),t.e,u.b,cz)for d0=0,4 do cA("GrilleSlat",0.1,0.1,4.6,c1(cE+0.08,4.1+d0*0.25,-4.4),t.c,u.b,cz)end;cC("ExhaustOutlet",0.45,0.4,c1(cE+0.2,4.4,-1.9),t.d,u.b,cz)cC("FuelFiller",0.12,
+0.5,c1(cE+0.08,6.0,-7.5),t.c,u.b,cz)for Y,bk in ipairs({-1,1})do cA("SideStep",0.7,0.1,0.9,c1(bk*(cE+0.3),3.55,-0.4),t.d,u.b,cz)cA("StepHanger",0.08,0.4,0.9,c1(bk*(cE+0.62),3.75,-0.4),t.d,u.b,
+cz)cA("GrabBar",0.08,1.2,0.08,c1(bk*(cE+0.3),5.6,-0.4),t.c,u.b,cz)cA("GrabBarMount",0.2,0.08,0.08,c1(bk*(cE+0.22),6.2,-0.4),t.c,u.b,cz)cA("GrabBarMount",0.2,0.08,0.08,c1(bk*(cE+0.22),5.0,-0.4),t.c,
+u.b,cz)cA("Mudflap",1.3,1.6,0.06,c1(bk*w.f,1.7,-0.7),t.g,u.c,cz)cA("Mudflap",1.3,1.8,0.06,c1(bk*w.f,1.6,8.1),t.g,u.c,cz)end;local d5=-(cE+0.3)cC("ShovelHandle",3.0,0.14,c1(d5,4.3,7.4)*D(90),t.c,u.e,
+cz)cA("ShovelBlade",0.08,0.7,0.8,c1(d5,4.3,9.3),t.d,u.b,cz)cC("PickHandle",2.8,0.14,c1(d5,4.75,7.2)*D(90),t.c,u.e,cz)cA("PickHead",0.1,1.2,0.2,c1(d5,4.75,5.75),t.d,u.b,cz)for Y,cI in ipairs({6.2,
+8.3})do cA("ToolBracket",0.3,0.8,0.12,c1(-(cE+0.18),4.5,cI),t.e,u.b,cz)end;cC("Extinguisher",1.0,0.35,c1(-(cE+0.25),4.6,-7.4)*E(90),t.l,u.a,cz)cA("ExtinguisherStrap",0.45,0.1,0.45,c1(-(cE+0.25),4.8,
+-7.4),t.e,u.b,cz)end;local function d6(cb)local cz=cb.chassis;local c1,cA,cC=cb.at,cb.block,cb.cylinder;local cJ,cH=w.i,w.p;for Y,bk in ipairs({-1,1})do cA("TaillightHousing",0.9,0.7,0.1,c1(bk*3.55,
+4.6,cJ+0.05),t.e,u.a,cz)cA("Taillight",0.3,0.22,0.05,c1(bk*3.72,4.72,cJ+0.11),t.l,u.d,cz)cA("TurnSignal",0.22,0.16,0.05,c1(bk*3.4,4.72,cJ+0.11),t.o,u.d,cz)cA("BlackoutTaillight",0.25,0.1,0.05,
+c1(bk*3.55,4.42,cJ+0.11),t.m,u.a,cz)cA("LightGuard",1.1,0.08,0.08,c1(bk*3.55,5.05,cJ+0.35),t.c,u.b,cz)for Y,ad in ipairs({-0.5,0.5})do cA("LightGuardPost",0.08,0.5,0.3,c1(bk*3.55+ad,4.82,cJ+0.2),t.c,
+u.b,cz)end;cA("CanRack",1.4,0.1,0.7,c1(bk*3.4,3.95,cJ+0.4),t.d,u.b,cz)for d0=0,1 do cA("Jerrycan",0.55,1.1,0.6,c1(bk*(3.1+d0*0.6),4.55,cJ+0.4),t.h,u.b,cz)end;cA("CanStrap",1.3,0.08,0.1,c1(bk*3.4,
+4.85,cJ+0.72),t.e,u.e,cz)cA("RearShackle",0.35,0.45,0.4,c1(bk*1.9,1.5,cJ+0.2),t.d,u.b,cz)cA("Reflector",0.2,0.2,0.04,c1(bk*4.1,3.85,cJ+0.03),t.l,u.a,cz)end;cA("TowPintle",0.5,0.45,0.4,c1(0,1.5,
+cJ+0.2),t.d,u.b,cz)cA("PintleHook",0.18,0.35,0.25,c1(0,1.3,cJ+0.45),t.e,u.b,cz)cA("RearCamera",0.4,0.3,0.3,c1(0,cH-0.2,cJ+0.18),t.e,u.a,cz)cC("RearCameraLens",0.05,0.18,c1(0,cH-0.2,cJ+0.35)*D(90),
+t.p,u.a,cz)cA("IdPanel",1.2,0.45,0.04,c1(3.4,6.2,cJ+0.03),t.e,u.a,cz)end;local function d7(cb)local M,d8=w.s,w.t;local d9,da=w.m,w.i-0.15;local db=cb.off(0,d9-w.a,da-w.b)local cq=CFrame.new(0,
+-d8/2*b,0)local dc=cb.at(0,d9+d8/2,da)local dd=cb.solid(cb.block("Ramp",M,d8,0.3,dc,t.b,u.a,false))cb.block("RampLiner",M-0.3,d8-0.3,0.05,dc*cb.off(0,0,-0.17),t.i,u.a,dd)cb.block("RampDoor",1.8,3.1,
+0.05,dc*cb.off(0.6,-0.05,0.17),t.b,u.a,dd)cb.block("RampDoorSeam",1.9,0.06,0.04,dc*cb.off(0.6,1.55,0.2),t.e,u.a,dd)cb.block("RampDoorSeam",0.06,3.2,0.04,dc*cb.off(-0.33,-0.05,0.2),t.e,u.a,
+dd)cb.block("RampDoorSeam",0.06,3.2,0.04,dc*cb.off(1.55,-0.05,0.2),t.e,u.a,dd)for Y,ce in ipairs({-1.0,1.0})do cb.block("RampDoorHinge",0.15,0.4,0.12,dc*cb.off(-0.38,ce,0.24),t.d,u.b,dd)end;
+cb.block("RampVisionBlock",0.4,0.25,0.06,dc*cb.off(0.6,1.1,0.2),t.p,u.a,dd)cb.block("RampHandle",0.1,0.5,0.1,dc*cb.off(1.25,0.2,0.24),t.e,u.b,dd)cb.block("RampHinge",M-0.4,0.25,0.25,dc*cb.off(0,
+-d8/2+0.12,0.18),t.d,u.b,dd)for Y,cd in ipairs({-2.1,2.1})do cb.block("RampLock",0.3,0.3,0.12,dc*cb.off(cd,d8/2-0.3,0.2),t.e,u.b,dd)end;for d0=0,3 do cb.block("RampTread",M-0.8,0.08,0.06,dc*cb.off(0,
+-1.5+d0*0.9,-0.21),t.d,u.b,dd)end;local cr=cb.joint("RampJoint",cb.chassis,dd,db,cq)cb.ramp={weld=cr,base=db}end;local function de(cb)local cz=cb.chassis;local A,cc,cH,df=w.v,w.w,w.p,w.x;local cA,cC,
+c1=cb.block,cb.cylinder,cb.at;cC("RwsBase",0.4,2.2,c1(A,cH+0.2,cc)*E(90),t.c,u.b,cz)if k then for s=0,7 do local cx=s*math.pi/4;cb.bolt(c1(A+0.95*math.cos(cx),cH+0.42,cc+0.95*math.sin(cx))*E(90),
+cz)end end;local dg=cA("RwsMount",0.3,0.3,0.3,c1(A,cH+0.4,cc),t.e,u.a,false)dg.Transparency=1;local dh=cb.joint("RwsYawWeld",cz,dg,cb.off(A,cH+0.4-w.a,cc-w.b),CFrame.new())local di=df-cH-1.0;local
+dj=cA("RwsPedestal",1.1,di,1.1,c1(A,cH+0.4+di/2,cc+0.1),t.b,u.a,dg)cA("RwsCable",0.2,di,0.2,c1(A-0.4,cH+0.4+di/2,cc+0.7),t.e,u.c,dg)cA("RwsJunctionBox",0.6,0.5,0.4,c1(A+0.55,cH+0.9,cc+0.5),t.c,u.a,
+dg)for Y,bk in ipairs({-1,1})do cA("RwsYoke",0.2,1.3,1.0,c1(A+bk*0.75,df-0.3,cc+0.1),t.c,u.b,dg)for d0=0,3 do cC("RwsSmokeTube",0.45,0.2,cb.facing(A+bk*0.8,cH+0.85+d0*0.24,cc-0.35,bk*0.5,0.4,
+-0.75)*D(90),t.c,u.b,dg)end end;local dk={}table.insert(dk,cA("RwsAmmoCan",0.6,0.8,1.1,c1(A-1.15,df-0.35,cc+0.1),t.h,u.b,dg))cA("RwsAmmoLid",0.62,0.08,1.12,c1(A-1.15,df+0.07,cc+0.1),t.h,u.b,
+dg)cA("RwsFeedChute",0.35,0.2,0.6,c1(A-0.6,df-0.05,cc+0.1),t.e,u.b,dg)local dl=cA("RwsCradle",0.3,0.3,0.3,c1(A,df,cc),t.e,u.a,false)dl.Transparency=1;local dm=cb.joint("RwsPitchWeld",dg,dl,cb.off(0,
+df-cH-0.4,0),CFrame.new())table.insert(dk,dj)table.insert(dk,cA("RwsReceiver",0.45,0.55,1.8,c1(A,df,cc+0.2),t.f,u.b,dl))cA("RwsFeedCover",0.47,0.08,1.1,c1(A,df+0.31,cc+0.05),t.f,u.b,
+dl)cA("RwsChargingHandle",0.3,0.08,0.08,c1(A+0.3,df+0.1,cc+0.6),t.e,u.b,dl)table.insert(dk,cC("RwsJacket",0.8,0.3,c1(A,df,cc-1.1)*D(90),t.f,u.b,dl))if k then for d0=0,2 do cC("RwsJacketHole",0.02,
+0.1,c1(A+0.15,df,cc-0.85-d0*0.22),t.e,u.a,dl)end end;table.insert(dk,cC("RwsBarrel",3.2,0.16,c1(A,df,cc-3.1)*D(90),t.f,u.b,dl))cA("RwsCarryHandle",0.08,0.08,0.5,c1(A,df+0.35,cc-1.55),t.f,u.b,dl)for Y,
+cf in ipairs({-0.22,0.22})do cA("RwsCarryHandlePost",0.08,0.25,0.08,c1(A,df+0.2,cc-1.55+cf),t.f,u.b,dl)end;cA("RwsFrontSight",0.06,0.2,0.06,c1(A,df+0.15,cc-4.5),t.f,u.b,dl)table.insert(dk,
+cC("RwsFlashHider",0.3,0.24,c1(A,df,cc-4.8)*D(90),t.f,u.b,dl))table.insert(dk,cA("RwsSight",0.8,0.8,1.2,c1(A+1.3,df+0.1,cc-0.1),t.b,u.a,dl))cA("RwsSightArm",0.6,0.25,0.4,c1(A+0.75,df,cc-0.1),t.c,u.b,
+dl)cA("RwsSunshade",0.9,0.06,0.45,c1(A+1.3,df+0.53,cc-0.8),t.c,u.b,dl)cC("RwsDayCamera",0.05,0.34,c1(A+1.12,df+0.25,cc-0.72)*D(90),t.p,u.a,dl)cA("RwsThermal",0.3,0.28,0.05,c1(A+1.48,df+0.25,cc-0.72),
+t.e,u.a,dl)cC("RwsLaser",0.05,0.16,c1(A+1.3,df-0.12,cc-0.72)*D(90),t.p,u.a,dl)for Y,Z in ipairs(dk)do Z.CanQuery=true end;cb.rws={yaw=dh,yawBase=dh.C0,pitch=dm,pitchBase=dm.C0,cradle=dl,
+trigger=dk}end;local function dn(cb)local cz=cb.chassis;local c1,cA=cb.at,cb.block;local cH,cI=w.p,w.r;for Y,bk in ipairs({-1,1})do cA("BenchFrame",0.9,0.3,8.6,c1(bk*w.ad,2.55,6.0),t.d,u.b,cz)for Y,
+cO in ipairs({2.0,6.0,10.0})do cA("BenchLeg",0.12,0.35,0.12,c1(bk*(w.ad-0.3),2.22,cO),t.d,u.b,cz)end;cA("BenchBack",0.2,1.8,8.6,c1(bk*2.5,3.9,6.0),t.j,u.e,cz)for Y,cc in ipairs(w.ae)do cA("SeatBelt",
+0.05,1.6,0.12,c1(bk*2.38,3.9,cc+0.3),t.e,u.e,cz)cA("SeatDivider",0.5,0.5,0.06,c1(bk*2.3,3.2,cc+1.2),t.d,u.b,cz)end;cA("Handrail",0.1,0.1,10.0,c1(bk*1.2,cH-0.55,5.8),t.d,u.b,cz)for Y,d3 in ipairs({1.2,
+5.8,10.4})do cA("HandrailBracket",0.08,0.2,0.08,c1(bk*1.2,cH-0.43,d3),t.d,u.b,cz)end;for Y,cW in ipairs({3.6,8.4})do cA("Intercom",0.12,0.35,0.3,c1(bk*2.62,5.3,cW),t.e,u.a,cz)end end;
+cA("FirstAidKit",0.8,0.6,0.25,c1(1.6,5.2,cI+0.18),t.h,u.e,cz)cA("FirstAidCross",0.45,0.12,0.02,c1(1.6,5.2,cI+0.31),t.l,u.a,cz)cA("FirstAidCross",0.12,0.45,0.02,c1(1.6,5.2,cI+0.31),t.l,u.a,cz)for d0=0,
+1 do cA("WaterCan",0.35,0.7,0.55,c1(-1.9+d0*0.45,2.45,cI+0.45),t.b,u.a,cz)end;cA("RifleRack",1.4,0.1,0.3,c1(-1.6,4.6,cI+0.2),t.e,u.b,cz)end;local function dp(cb)local cz=cb.chassis;local z=w.y;local
+dq=cb.seat("VehicleSeat","DriverSeat",cb.at(w.z,z,w.aa),cz)dq.MaxSpeed=0;dq.Torque=0;dq.TurnSpeed=0;dq.HeadsUpDisplay=false;local dr=cb.seat("VehicleSeat","CommanderSeat",cb.at(w.ab,z,w.ac),
+cz)dr.MaxSpeed=0;dr.Torque=0;dr.TurnSpeed=0;dr.HeadsUpDisplay=false;cb.driverSeat=dq;cb.commanderSeat=dr;for Y,bk in ipairs({-1,1})do for Y,cc in ipairs(w.ae)do table.insert(cb.troopSeats,
+cb.seat("Seat","TroopSeat",cb.at(bk*w.ad,z,cc)*D(90*bk),cz))end end;table.insert(cb.troopSeats,cb.seat("Seat","TroopSeat",cb.at(0,z,w.r+1.2)*D(180),cz))cb.block("TroopSeatBack",1.4,1.8,0.2,cb.at(0,
+z+1.1,w.r+0.5),t.j,u.e,cz)end;local function ds(dt,du)if dt=="driver"then return Vector3.new(-(w.j+3),2.4,w.aa)end;if dt=="commander"then return Vector3.new(w.j+3,2.4,w.ac)end;return
+Vector3.new((du%3-1)*2.5,2.4,w.i+4+math.floor(du/3)*2)end;local function dv(dw,dx,dy)if dw<dx then return math.min(dx,dw+dy)end;return math.max(dx,dw-dy)end;local function dz(av)local a7=U()local
+dA={}for Y,dB in ipairs(av.allSeats)do local a0=a5(dB.seat,a7)if not a0 and dB.name then local aw=false;pcall(function()aw=dB.seat.Occupant~=nil end)if aw then a0=dB.name end end;if a0~=dB.name then
+local dC=dB.name;dB.name=a0;if a0 then if dB.role=="driver"then R("Stryker: W/S drive, A/D steer. F at the back lowers or raises the ramp. Space gets you out.",a0)elseif dB.role=="commander"then
 R("Stryker commander: A/D turns the .50, W/S raises and lowers it. Click the gun to shoot where it points, or click a spot to swing the gun there and shoot. Space gets you out.",a0)else
-R("You're aboard the Stryker. Space gets you out.",a0)end elseif dC and a7[dC]and a3(dC)>0 then local
-Z=ds(dB.role,dB.index)pcall(setPlayerPosition,dC,av.chassis.CFrame*CFrame.new(Z.X*b,(Z.Y-w.a)*b,(Z.Z-w.b)*b))end end;if dB.name then dA[dB.name]=true end
-end;av.aboard=dA;av.driver=av.allSeats[1].name;av.commander=av.allSeats[2].name;local dD=0;for d0=3,#av.allSeats do local dB=av.allSeats[d0]local dE=not dB.name and not dB.seat.Occupant;if dE then
-dD=dD+1 end;pcall(bR,dB.prompt,dE)end;if av.prompts then
-pcall(bR,av.prompts.driver,av.driver==nil)pcall(bR,av.prompts.commander,av.commander==nil)pcall(bR,av.prompts.board,dD>0)pcall(bU,av.prompts.board,"ObjectText",dD.." of "..#av.allSeats-2
-.." seats free")pcall(bU,av.prompts.ramp,"ActionText",av.rampOpen and"Raise ramp"or"Lower ramp")end end;local function dF(av,dG)local function dH(dB,af)local a0=ae(af)if dB.seat.Occupant or
-a5(dB.seat)then if a0 then R("That seat is taken.",a0)end;return end;if a0 and av.aboard[a0]then R("Hop out of your seat first (Space), then try again.",a0)return end;bO(dB.seat,af,a0)end;local
-W,bF=pcall(function()local
-Z={}Z.driver=bW(dG.driver,"DriverPrompt",Enum.KeyCode.E,"Get in","Driver",6,0)Z.commander=bW(dG.commander,"CommanderPrompt",Enum.KeyCode.E,"Get in","Commander (.50 cal)",6,0)Z.board=bW(dG.rear,"BoardPrompt",Enum.KeyCode.E,"Board","9 of 9 seats free",8,0)Z.ramp=bW(dG.rear,"RampPrompt",Enum.KeyCode.F,"Lower ramp","Rear ramp",8,0)pcall(function()Z.board.UIOffset=Vector2.new(-85,0)Z.ramp.UIOffset=Vector2.new(85,0)end)av.prompts=Z;Z.driver.Triggered:Connect(function(af)dH(av.allSeats[1],af)end)Z.commander.Triggered:Connect(function(af)dH(av.allSeats[2],af)end)for
-d0=3,#av.allSeats do local
-dB=av.allSeats[d0]dB.prompt=bW(dB.seat,"SitPrompt",Enum.KeyCode.E,"Sit","Troop seat",5,0)dB.prompt.Triggered:Connect(function(af)dH(dB,af)end)end;Z.board.Triggered:Connect(function(af)for
-d0=3,#av.allSeats do local dB=av.allSeats[d0]if not dB.name and not dB.seat.Occupant then dH(dB,af)return end end;local a0=ae(af)if a0 then R("The troop compartment is full.",a0)end
+R("You're aboard the Stryker. Space gets you out.",a0)end elseif dC and a7[dC]and a3(dC)>0 then local Z=ds(dB.role,dB.index)pcall(setPlayerPosition,dC,av.chassis.CFrame*CFrame.new(Z.X*b,(Z.Y-w.a)*b,
+(Z.Z-w.b)*b))end end;if dB.name then dA[dB.name]=true end end;av.aboard=dA;av.driver=av.allSeats[1].name;av.commander=av.allSeats[2].name;local dD=0;for d0=3,#av.allSeats do local
+dB=av.allSeats[d0]local dE=not dB.name and not dB.seat.Occupant;if dE then dD=dD+1 end;pcall(bR,dB.prompt,dE)end;if av.prompts then pcall(bR,av.prompts.driver,av.driver==nil)pcall(bR,
+av.prompts.commander,av.commander==nil)pcall(bR,av.prompts.board,dD>0)pcall(bU,av.prompts.board,"ObjectText",dD.." of "..#av.allSeats-2 .." seats free")pcall(bU,av.prompts.ramp,"ActionText",
+av.rampOpen and"Raise ramp"or"Lower ramp")end end;local function dF(av,dG)local function dH(dB,af)local a0=ae(af)if dB.seat.Occupant or a5(dB.seat)then if a0 then R("That seat is taken.",a0)end;
+return end;if a0 and av.aboard[a0]then R("Hop out of your seat first (Space), then try again.",a0)return end;bO(dB.seat,af,a0)end;local W,bF=pcall(function()local Z={}Z.driver=bW(dG.driver,
+"DriverPrompt",Enum.KeyCode.E,"Get in","Driver",6,0)Z.commander=bW(dG.commander,"CommanderPrompt",Enum.KeyCode.E,"Get in","Commander (.50 cal)",6,0)Z.board=bW(dG.rear,"BoardPrompt",Enum.KeyCode.E,
+"Board","9 of 9 seats free",8,0)Z.ramp=bW(dG.rear,"RampPrompt",Enum.KeyCode.F,"Lower ramp","Rear ramp",8,0)pcall(function()Z.board.UIOffset=Vector2.new(-85,0)Z.ramp.UIOffset=Vector2.new(85,
+0)end)av.prompts=Z;Z.driver.Triggered:Connect(function(af)dH(av.allSeats[1],af)end)Z.commander.Triggered:Connect(function(af)dH(av.allSeats[2],af)end)for d0=3,#av.allSeats do local
+dB=av.allSeats[d0]dB.prompt=bW(dB.seat,"SitPrompt",Enum.KeyCode.E,"Sit","Troop seat",5,0)dB.prompt.Triggered:Connect(function(af)dH(dB,af)end)end;Z.board.Triggered:Connect(function(af)for d0=3,
+#av.allSeats do local dB=av.allSeats[d0]if not dB.name and not dB.seat.Occupant then dH(dB,af)return end end;local a0=ae(af)if a0 then R("The troop compartment is full.",a0)end
 end)Z.ramp.Triggered:Connect(function()av.rampOpen=not av.rampOpen end)end)if not W then print("[Stryker] key prompts unavailable: "..tostring(bF))end;local function dI(dJ,dK)pcall(function()local
-dL=Instance.new("ClickDetector")dL.MaxActivationDistance=16;dL.Parent=dJ;dL.MouseClick:Connect(dK)end)end;dI(dG.driver,function(af)dH(av.allSeats[1],af)end)dI(dG.commander,function(af)dH(av.allSeats[2],af)end)dI(dG.rear,function(af)for
-d0=3,#av.allSeats do local dB=av.allSeats[d0]if not dB.name and not dB.seat.Occupant then dH(dB,af)return end end;local a0=ae(af)if a0 then R("The troop compartment is full.",a0)end end)end;local
-function dM(dN,dO)return 1-(1-dN)^(dO/0.03)end;local function dP(aG,aD,al,av)local cn=aD.Magnitude;if cn<0.001 then return nil end;local dQ=aD/cn;local dR=0;for Y=1,5 do local
-ap=am(aG+dQ*dR,dQ*(cn-dR),al)if not ap then return nil end;local cD,dS=false,nil;pcall(function()dS=ap.Position;if type(ap.Instance)~="string"and not(av and az(av,ap.Instance))then
-cD=ap.Instance.CanCollide==true end end)if cD then return ap end;if not dS then return nil end;dR=(dS-aG).Magnitude+0.05;if dR>=cn then return nil end end;return nil end;local function dT(a1)local
-dU=a1.LookVector;return y(-dU.X,-dU.Z)end;local function dV(G,dW)return CFrame.new(G)*CFrame.Angles(0,dW,0)end;local function dX(dY)return
-dV(dY.pos,dY.heading)*CFrame.Angles(dY.pitch,0,dY.roll)end;local function dZ(av,d_,e0)local e1=0;for Y,cc in ipairs(w.g)do e1=e1+cc end;e1=e1/#w.g*b;local
-e2={front=Vector3.new(0,0,w.g[1]*b),rear=Vector3.new(0,0,w.g[#w.g]*b),left=Vector3.new(-w.f*b,0,e1),right=Vector3.new(w.f*b,0,e1)}local e3={}for ay,cp in pairs(e2)do local e4=d_*cp;local
-aG=Vector3.new(e4.X,e0+n.c,e4.Z)local ap=dP(aG,Vector3.new(0,-(n.c+n.d),0),av.params,av)if ap then e3[ay]=ap.Position.Y end end;return e3 end;local function e5(av,d_,e6)local e7=1;if e6<0 then e7=-1
-end;local e8=w.h*b+0.5;if e7<0 then e8=w.i*b-0.5 end;local aD=d_.LookVector*e7*(math.abs(e6)+1)local e9=w.j*b-0.3;for Y,A in ipairs({-e9,0,e9})do for Y,z in ipairs(n.f)do local
-ap=dP(d_*Vector3.new(A,z,e8),aD,av.params,av)if ap then local ea=0;pcall(function()ea=ap.Normal.Y end)if ea<n.g then return true end end end end;return false end;local function eb(av)local
-ec=av.chassis;local a6=av.allSeats[1].seat;local dY=av.drive;local ed=(w.g[#w.g]-w.g[1])*b;local ee=w.f*2*b;local bn,ef,eg=0,0,0;local eh,ei,ej=0,0,0;local ek=0;local el=tick()while aB(av)do local
-by=a6.Occupant~=nil;if by or bn~=0 or not dY.grounded then task.wait(m.b)else task.wait(m.a)end;local em=tick()local dO=math.min(em-el,0.2)el=em;av.beatDrive=em;local en,ct=0,0;if a6.Occupant then
-en=a6.Throttle;ct=a6.Steer end;local aW=en*c;if en<0 then aW=en*d end;if a6.Occupant then bn=bn+(aW-bn)*dM(e,dO)else bn=bn*(1-dM(0.2,dO))end;if en==0 and math.abs(bn)<0.05 then bn=0
-end;ef=ef+(-ct*h-ef)*dM(0.15,dO)if ct==0 and math.abs(ef)<0.002 then ef=0 end;local G,dW=dY.pos,dY.heading;local dy=bn*dO;if dy~=0 and dY.grounded then av.blocked=e5(av,dV(G,dW),dy)if av.blocked then
-bn,dy=0,0 else dW=dW+bn/g*ef/h*dO;G=G+dV(G,dW).LookVector*dy end elseif not dY.grounded then dy=0 end;ek=ek-dO;if dy~=0 or not dY.grounded or ek<=0 then ek=n.e;local e3=dZ(av,dV(G,dW),dY.pos.Y)local
-eo=nil;if dy>0 then eo=e3.front elseif dy<0 then eo=e3.rear end;if eo and eo-dY.pos.Y>n.b then G,dW,bn=dY.pos,dY.heading,0 else local ep,eq=0,0;for Y,z in pairs(e3)do ep=ep+z;eq=eq+1 end;local
-z=G.Y;if eq>0 then local er=ep/eq;if er>=z-0.05 then z=er;dY.vy=0;dY.grounded=true else dY.vy=dY.vy-n.a*dO;z=math.max(er,z+dY.vy*dO)dY.grounded=z<=er+0.01;if dY.grounded then dY.vy=0 end end;local
-dm,es=dY.pitch,dY.roll;if e3.front and e3.rear then dm=y(e3.front-e3.rear,ed)end;if e3.left and e3.right then es=y(e3.right-e3.left,ee)end;local
-cb=dM(n.h,dO)dY.pitch=dY.pitch+(dm-dY.pitch)*cb;dY.roll=dY.roll+(es-dY.roll)*cb else dY.vy=dY.vy-n.a*dO;z=z+dY.vy*dO;dY.grounded=false end;G=Vector3.new(G.X,z,G.Z)end end;local
-et=(G-dY.pos).Magnitude>0.001 or dW~=dY.heading or math.abs(dY.pitch-(dY.shownPitch or 0))>0.0005 or math.abs(dY.roll-(dY.shownRoll or 0))>0.0005;dY.pos,dY.heading=G,dW;av.speed=bn;if et then
-dY.shownPitch,dY.shownRoll=dY.pitch,dY.roll;ec.CFrame=dX(dY)*av.chassisOffset end;if G.Y<n.i then
+dL=Instance.new("ClickDetector")dL.MaxActivationDistance=16;dL.Parent=dJ;dL.MouseClick:Connect(dK)end)end;dI(dG.driver,function(af)dH(av.allSeats[1],af)end)dI(dG.commander,
+function(af)dH(av.allSeats[2],af)end)dI(dG.rear,function(af)for d0=3,#av.allSeats do local dB=av.allSeats[d0]if not dB.name and not dB.seat.Occupant then dH(dB,af)return end end;local a0=ae(af)if a0
+then R("The troop compartment is full.",a0)end end)end;local function dM(dN,dO)return 1-(1-dN)^(dO/0.03)end;local function dP(aG,aD,al,av)local cn=aD.Magnitude;if cn<0.001 then return nil end;local
+dQ=aD/cn;local dR=0;for Y=1,5 do local ap=am(aG+dQ*dR,dQ*(cn-dR),al)if not ap then return nil end;local cD,dS=false,nil;pcall(function()dS=ap.Position;if type(ap.Instance)~="string"and not(av and
+az(av,ap.Instance))then cD=ap.Instance.CanCollide==true end end)if cD then return ap end;if not dS then return nil end;dR=(dS-aG).Magnitude+0.05;if dR>=cn then return nil end end;return nil end;local
+function dT(a1)local dU=a1.LookVector;return y(-dU.X,-dU.Z)end;local function dV(G,dW)return CFrame.new(G)*CFrame.Angles(0,dW,0)end;local function dX(dY)return dV(dY.pos,
+dY.heading)*CFrame.Angles(dY.pitch,0,dY.roll)end;local function dZ(av,d_,e0)local e1=0;for Y,cc in ipairs(w.g)do e1=e1+cc end;e1=e1/#w.g*b;local e2={front=Vector3.new(0,0,w.g[1]*b),
+rear=Vector3.new(0,0,w.g[#w.g]*b),left=Vector3.new(-w.f*b,0,e1),right=Vector3.new(w.f*b,0,e1)}local e3={}for ay,cp in pairs(e2)do local e4=d_*cp;local aG=Vector3.new(e4.X,e0+n.c,e4.Z)local ap=dP(aG,
+Vector3.new(0,-(n.c+n.d),0),av.params,av)if ap then e3[ay]=ap.Position.Y end end;return e3 end;local function e5(av,d_,e6)local e7=1;if e6<0 then e7=-1 end;local e8=w.h*b+0.5;if e7<0 then e8=w.i*b-0.5
+end;local aD=d_.LookVector*e7*(math.abs(e6)+1)local e9=w.j*b-0.3;for Y,A in ipairs({-e9,0,e9})do for Y,z in ipairs(n.f)do local ap=dP(d_*Vector3.new(A,z,e8),aD,av.params,av)if ap then local ea=0;
+pcall(function()ea=ap.Normal.Y end)if ea<n.g then return true end end end end;return false end;local function eb(av)local ec=av.chassis;local a6=av.allSeats[1].seat;local dY=av.drive;local
+ed=(w.g[#w.g]-w.g[1])*b;local ee=w.f*2*b;local bn,ef,eg=0,0,0;local eh,ei,ej=0,0,0;local ek=0;local el=tick()while aB(av)do local by=a6.Occupant~=nil;if by or bn~=0 or not dY.grounded then
+task.wait(m.b)else task.wait(m.a)end;local em=tick()local dO=math.min(em-el,0.2)el=em;av.beatDrive=em;local en,ct=0,0;if a6.Occupant then en=a6.Throttle;ct=a6.Steer end;local aW=en*c;if en<0 then
+aW=en*d end;if a6.Occupant then bn=bn+(aW-bn)*dM(e,dO)else bn=bn*(1-dM(0.2,dO))end;if en==0 and math.abs(bn)<0.05 then bn=0 end;ef=ef+(-ct*h-ef)*dM(0.15,dO)if ct==0 and math.abs(ef)<0.002 then ef=0
+end;local G,dW=dY.pos,dY.heading;local dy=bn*dO;if dy~=0 and dY.grounded then av.blocked=e5(av,dV(G,dW),dy)if av.blocked then bn,dy=0,0 else dW=dW+bn/g*ef/h*dO;G=G+dV(G,dW).LookVector*dy end elseif
+not dY.grounded then dy=0 end;ek=ek-dO;if dy~=0 or not dY.grounded or ek<=0 then ek=n.e;local e3=dZ(av,dV(G,dW),dY.pos.Y)local eo=nil;if dy>0 then eo=e3.front elseif dy<0 then eo=e3.rear end;if eo and
+eo-dY.pos.Y>n.b then G,dW,bn=dY.pos,dY.heading,0 else local ep,eq=0,0;for Y,z in pairs(e3)do ep=ep+z;eq=eq+1 end;local z=G.Y;if eq>0 then local er=ep/eq;if er>=z-0.05 then z=er;dY.vy=0;
+dY.grounded=true else dY.vy=dY.vy-n.a*dO;z=math.max(er,z+dY.vy*dO)dY.grounded=z<=er+0.01;if dY.grounded then dY.vy=0 end end;local dm,es=dY.pitch,dY.roll;if e3.front and e3.rear then
+dm=y(e3.front-e3.rear,ed)end;if e3.left and e3.right then es=y(e3.right-e3.left,ee)end;local cb=dM(n.h,dO)dY.pitch=dY.pitch+(dm-dY.pitch)*cb;dY.roll=dY.roll+(es-dY.roll)*cb else dY.vy=dY.vy-n.a*dO;
+z=z+dY.vy*dO;dY.grounded=false end;G=Vector3.new(G.X,z,G.Z)end end;local et=(G-dY.pos).Magnitude>0.001 or dW~=dY.heading or math.abs(dY.pitch-(dY.shownPitch or 0))>0.0005 or
+math.abs(dY.roll-(dY.shownRoll or 0))>0.0005;dY.pos,dY.heading=G,dW;av.speed=bn;if et then dY.shownPitch,dY.shownRoll=dY.pitch,dY.roll;ec.CFrame=dX(dY)*av.chassisOffset end;if G.Y<n.i then
 print("[Stryker] "..av.owner.."'s Stryker fell out of the map")R("Your Stryker fell out of the map. Spawn a new one with :spawn stryker.",av.owner)ax(av.key)return end;eg=eg+bn*dO;if em-ej>=m.d
 and(eg~=ei or ef~=eh)then ej=em;eg=eg%(2*math.pi*w.d*b)ei,eh=eg,ef;for Y,M in ipairs(av.wheels)do M.weld.C0=M.base*CFrame.Angles(0,ef*M.steer,0)*CFrame.Angles(-eg/(w.d*b),0,0)end end;if math.abs(bn)>3
-then av.rampOpen=false end end end;local function eu(av,ev)local a1=av.chassis.CFrame;local ad=ev-av.cradle.Position;local
-cF,ew,cO=ad:Dot(a1.RightVector),ad:Dot(a1.UpVector),-ad:Dot(a1.LookVector)local dh=y(-cF,-cO)local dm=y(ew,math.sqrt(cF*cF+cO*cO))return dh,math.max(x.d,math.min(x.e,dm))end;local function
-ex(av,ev)local W,ey=pcall(function()local ca=dX(av.drive)local ad=ev-ca.Position;local cF,ew,cO=ad:Dot(ca.RightVector),ad:Dot(ca.UpVector),-ad:Dot(ca.LookVector)return math.abs(cF)<=(w.j+1.5)*b and
-ew<=(w.x+2)*b and cO>=(w.h-1)*b and cO<=(w.i+1)*b end)return W and ey end;local function ez(av)local eA=av.rws;local dh=av.yaw or 0;local dm=av.pitch or 0;local dd=av.rampShown or 0;local
-eB,eC,eD=dh,dm,0;local el=tick()local eE,eF=0,0;local bN=av.allSeats[2].seat;while aB(av)do local eG=bN.Occupant~=nil or av.recoil>0 or dd~=(av.rampOpen and 1 or 0)if eG then task.wait(0.03)else
-task.wait(m.a)end;local em=tick()local dO=math.min(em-el,0.3)el=em;av.beatStation=em;if em-eE>=m.c then eE=em;dz(av)end;local dx=av.rampOpen and 1 or 0;if dd~=dx then
-dd=dv(dd,dx,dO/x.k)av.ramp.weld.C0=av.ramp.base*CFrame.Angles(w.u*dd,0,0)av.rampShown=dd end;local et=false;local eH=nil;local by=bN.Occupant~=nil;if by then local ct,en=bN.Steer,bN.Throttle;if ct~=0
-or en~=0 then av.aimAt=nil;dh=(dh-ct*x.b*dO+math.pi)%(2*math.pi)-math.pi;dm=math.max(x.d,math.min(x.e,dm+en*x.c*dO))et=true elseif av.aimAt then local eI,eJ=eu(av,av.aimAt.point)local eK=x.b*dO;local
-eL=(eI-dh+math.pi)%(2*math.pi)-math.pi;dh=(dh+math.max(-eK,math.min(eK,eL))+math.pi)%(2*math.pi)-math.pi;dm=dv(dm,eJ,x.c*dO)et=true;if math.abs(eL)<=eK+x.u and math.abs(eJ-dm)<=x.u then
-eH=av.aimAt.by;av.aimAt=nil elseif em>av.aimAt.giveUp then av.aimAt=nil end end else av.aimAt=nil end;if av.recoil>0 then av.recoil=math.max(0,av.recoil-dO*4)et=true end;if et
-and(math.abs(dh-eB)>0.0005 or math.abs(dm-eC)>0.0005 or av.recoil~=eD)then
-eB,eC,eD=dh,dm,av.recoil;av.yaw,av.pitch=dh,dm;eA.yaw.C0=eA.yawBase*CFrame.Angles(0,dh,0)eA.pitch.C0=eA.pitchBase*CFrame.Angles(dm,0,0)*CFrame.new(0,0,av.recoil*b)end;if eH then
-av.pendingFire={by=eH,at=em+0.05}elseif av.pendingFire and em>=av.pendingFire.at then local eM=av.pendingFire.by;av.pendingFire=nil;if by then bL(av,eM)end end;if by then if em-eF>=x.l then
-eF=em;local bG=av.cradle.CFrame*CFrame.new(0,0,-x.j*b)local ap=c3(av,bG.Position,bG.LookVector,x.a)if x.w and aY(aX(ap),av.commander)then bL(av,av.commander)end end else c4(av)end end end;local
-function eN(eO,c0,ca,av,eP)local
-eQ=Instance.new("Part")eQ.Name=i;eQ.Size=Vector3.new(1,1,1)eQ.CFrame=ca;eQ.Transparency=1;eQ.Anchored=true;eQ.CanCollide=false;eQ.CanQuery=false;eQ.CanTouch=false;N(eQ,c0)pcall(function()eQ:SetAttribute("StrykerOwner",eO)end)av.marker=eQ;table.insert(av.extras,eQ)local
-cb=c9(c0,ca,av)local
-ec=cb.block("Chassis",3.0,0.4,4.0,cb.at(0,w.a,w.b),t.e,u.a,false)ec.Massless=false;ec.CustomPhysicalProperties=PhysicalProperties.new(w.c,0.3,0,1,1)ec.Transparency=1;cb.chassis=ec;pcall(function()c0.PrimaryPart=ec
+then av.rampOpen=false end end end;local function eu(av,ev)local a1=av.chassis.CFrame;local ad=ev-av.cradle.Position;local cF,ew,cO=ad:Dot(a1.RightVector),ad:Dot(a1.UpVector),
+-ad:Dot(a1.LookVector)local dh=y(-cF,-cO)local dm=y(ew,math.sqrt(cF*cF+cO*cO))return dh,math.max(x.d,math.min(x.e,dm))end;local function ex(av,ev)local W,ey=pcall(function()local ca=dX(av.drive)local
+ad=ev-ca.Position;local cF,ew,cO=ad:Dot(ca.RightVector),ad:Dot(ca.UpVector),-ad:Dot(ca.LookVector)return math.abs(cF)<=(w.j+1.5)*b and ew<=(w.x+2)*b and cO>=(w.h-1)*b and cO<=(w.i+1)*b end)return W
+and ey end;local function ez(av)local eA=av.rws;local dh=av.yaw or 0;local dm=av.pitch or 0;local dd=av.rampShown or 0;local eB,eC,eD=dh,dm,0;local el=tick()local eE,eF=0,0;local
+bN=av.allSeats[2].seat;while aB(av)do local eG=bN.Occupant~=nil or av.recoil>0 or dd~=(av.rampOpen and 1 or 0)if eG then task.wait(0.03)else task.wait(m.a)end;local em=tick()local dO=math.min(em-el,
+0.3)el=em;av.beatStation=em;if em-eE>=m.c then eE=em;dz(av)end;local dx=av.rampOpen and 1 or 0;if dd~=dx then dd=dv(dd,dx,dO/x.k)av.ramp.weld.C0=av.ramp.base*CFrame.Angles(w.u*dd,0,0)av.rampShown=dd
+end;local et=false;local eH=nil;local by=bN.Occupant~=nil;if by then local ct,en=bN.Steer,bN.Throttle;if ct~=0 or en~=0 then av.aimAt=nil;dh=(dh-ct*x.b*dO+math.pi)%(2*math.pi)-math.pi;
+dm=math.max(x.d,math.min(x.e,dm+en*x.c*dO))et=true elseif av.aimAt then local eI,eJ=eu(av,av.aimAt.point)local eK=x.b*dO;local eL=(eI-dh+math.pi)%(2*math.pi)-math.pi;dh=(dh+math.max(-eK,math.min(eK,
+eL))+math.pi)%(2*math.pi)-math.pi;dm=dv(dm,eJ,x.c*dO)et=true;if math.abs(eL)<=eK+x.u and math.abs(eJ-dm)<=x.u then eH=av.aimAt.by;av.aimAt=nil elseif em>av.aimAt.giveUp then av.aimAt=nil end end else
+av.aimAt=nil end;if av.recoil>0 then av.recoil=math.max(0,av.recoil-dO*4)et=true end;if et and(math.abs(dh-eB)>0.0005 or math.abs(dm-eC)>0.0005 or av.recoil~=eD)then eB,eC,eD=dh,dm,av.recoil;av.yaw,
+av.pitch=dh,dm;eA.yaw.C0=eA.yawBase*CFrame.Angles(0,dh,0)eA.pitch.C0=eA.pitchBase*CFrame.Angles(dm,0,0)*CFrame.new(0,0,av.recoil*b)end;if eH then av.pendingFire={by=eH,at=em+0.05}elseif av.pendingFire
+and em>=av.pendingFire.at then local eM=av.pendingFire.by;av.pendingFire=nil;if by then bL(av,eM)end end;if by then if em-eF>=x.l then eF=em;local bG=av.cradle.CFrame*CFrame.new(0,0,-x.j*b)local
+ap=c3(av,bG.Position,bG.LookVector,x.a)if x.w and aY(aX(ap),av.commander)then bL(av,av.commander)end end else c4(av)end end end;local function eN(eO,c0,ca,av,eP)local eQ=Instance.new("Part")eQ.Name=i;
+eQ.Size=Vector3.new(1,1,1)eQ.CFrame=ca;eQ.Transparency=1;eQ.Anchored=true;eQ.CanCollide=false;eQ.CanQuery=false;eQ.CanTouch=false;N(eQ,c0)pcall(function()eQ:SetAttribute("StrykerOwner",
+eO)end)av.marker=eQ;table.insert(av.extras,eQ)local cb=c9(c0,ca,av)local ec=cb.block("Chassis",3.0,0.4,4.0,cb.at(0,w.a,w.b),t.e,u.a,false)ec.Massless=false;
+ec.CustomPhysicalProperties=PhysicalProperties.new(w.c,0.3,0,1,1)ec.Transparency=1;cb.chassis=ec;pcall(function()c0.PrimaryPart=ec
 end)av.stage="hull"cy(cb)av.stage="armour"cP(cb)av.stage="bow"cY(cb)av.stage="roof"d1(cb)av.stage="sides"d4(cb)av.stage="rear"d6(cb)av.stage="interior"dn(cb)av.stage="wheels"for d0,cc in ipairs(w.g)do
-local ct=0;if d0==1 then ct=1 elseif d0==2 then ct=0.55 end;local a0="RoadWheel"if d0>=3 then
-a0="RoadWheelRear"end;cs(cb,a0,-w.f,cc,ct)cs(cb,a0,w.f,cc,ct)end;av.stage="ramp"d7(cb)av.stage="turret"de(cb)av.stage="seats"dp(cb)av.stage="controls"local
-dG={driver=cb.anchor("DriverDoor",-(w.j+0.9),4.6,w.aa,ec),commander=cb.anchor("CommanderDoor",w.j+0.9,4.6,w.ac,ec),rear=cb.anchor("RearDoor",0,4.0,w.i+1.6,ec)}av.aimDot=b_(c0,ca)table.insert(av.extras,av.aimDot)av.dotSize=0;for
-Y,eR in ipairs(cb.rws.trigger)do pcall(function()local
-dL=Instance.new("ClickDetector")dL.MaxActivationDistance=x.m;dL.Parent=eR;dL.MouseClick:Connect(function(af)bM(av,af)end)dL.RightMouseClick:Connect(function(af)bM(av,af)end)end)end;av.chassis=ec;av.wheels=cb.wheels;av.ramp=cb.ramp;av.rws=cb.rws;av.cradle=cb.rws.cradle;av.allSeats={{seat=cb.driverSeat,role="driver",index=0},{seat=cb.commanderSeat,role="commander",index=0}}for
-d0,a6 in ipairs(cb.troopSeats)do
-table.insert(av.allSeats,{seat=a6,role="troop",index=d0-1})end;av.seats={driver=cb.driverSeat,commander=cb.commanderSeat}av.aboard={}av.rampOpen=false;av.recoil=0;av.nextBurst=0;dF(av,dG)local
-ak={c0}for Y,Z in ipairs(cb.parts)do ak[#ak+1]=Z end;av.params=aj(ak)av.chassisOffset=cb.off(0,w.a,w.b)av.drive={pos=ca.Position,heading=dT(ca),pitch=0,roll=0,vy=0,grounded=false}for Y,Z in
-ipairs(cb.parts)do if Z~=ec then Z.Anchored=false end end;c5(av,"driving",function()eb(av)end)c5(av,"gun and crew",function()ez(av)end)task.spawn(function()local eS=ca;while aB(av)do
-task.wait(j)pcall(function()local eT=ec.CFrame*CFrame.new(0,-w.a*b,-w.b*b)local a1=F(eT.Position,eT.LookVector)if(a1.Position-eS.Position).Magnitude>0.1 or a1.LookVector:Dot(eS.LookVector)<0.99995
-then eQ.CFrame=a1;eS=a1 end end)end end)print("[Stryker] built "..#cb.parts.." parts for "..eO)if eP then
+local ct=0;if d0==1 then ct=1 elseif d0==2 then ct=0.55 end;local a0="RoadWheel"if d0>=3 then a0="RoadWheelRear"end;cs(cb,a0,-w.f,cc,ct)cs(cb,a0,w.f,cc,ct)end;
+av.stage="ramp"d7(cb)av.stage="turret"de(cb)av.stage="seats"dp(cb)av.stage="controls"local dG={driver=cb.anchor("DriverDoor",-(w.j+0.9),4.6,w.aa,ec),commander=cb.anchor("CommanderDoor",w.j+0.9,4.6,
+w.ac,ec),rear=cb.anchor("RearDoor",0,4.0,w.i+1.6,ec)}av.aimDot=b_(c0,ca)table.insert(av.extras,av.aimDot)av.dotSize=0;for Y,eR in ipairs(cb.rws.trigger)do pcall(function()local
+dL=Instance.new("ClickDetector")dL.MaxActivationDistance=x.m;dL.Parent=eR;dL.MouseClick:Connect(function(af)bM(av,af)end)dL.RightMouseClick:Connect(function(af)bM(av,af)end)end)end;av.chassis=ec;
+av.wheels=cb.wheels;av.ramp=cb.ramp;av.rws=cb.rws;av.cradle=cb.rws.cradle;av.allSeats={{seat=cb.driverSeat,role="driver",index=0},{seat=cb.commanderSeat,role="commander",index=0}}for d0,a6 in
+ipairs(cb.troopSeats)do table.insert(av.allSeats,{seat=a6,role="troop",index=d0-1})end;av.seats={driver=cb.driverSeat,commander=cb.commanderSeat}av.aboard={}av.rampOpen=false;av.recoil=0;
+av.nextBurst=0;dF(av,dG)local ak={c0}for Y,Z in ipairs(cb.parts)do ak[#ak+1]=Z end;av.params=aj(ak)av.chassisOffset=cb.off(0,w.a,w.b)av.drive={pos=ca.Position,heading=dT(ca),pitch=0,roll=0,vy=0,
+grounded=false}for Y,Z in ipairs(cb.parts)do if Z~=ec then Z.Anchored=false end end;c5(av,"driving",function()eb(av)end)c5(av,"gun and crew",function()ez(av)end)task.spawn(function()local eS=ca;while
+aB(av)do task.wait(j)pcall(function()local eT=ec.CFrame*CFrame.new(0,-w.a*b,-w.b*b)local a1=F(eT.Position,eT.LookVector)if(a1.Position-eS.Position).Magnitude>0.1 or
+a1.LookVector:Dot(eS.LookVector)<0.99995 then eQ.CFrame=a1;eS=a1 end end)end end)print("[Stryker] built "..#cb.parts.." parts for "..eO)if eP then
 R(eO.." deployed a Stryker. Walk up and press E to get in: driver (front left), commander (right side) or board at the ramp.",eO)end end;local function eU(ay,eO,ca,eP)local
-c0=Instance.new("Model")c0.Name=eO.."_Stryker"f(c0)local
-av={key=ay,car=c0,carName=c0.Name,owner=eO,seats={},aboard={},parts={},own={},extras={},build=ay.."@"..string.format("%d",math.floor(tick()*1000)%1000000000).."-"..math.random(1,99999)}a[ay]=av;local
-W,bF=pcall(eN,eO,c0,ca,av,eP)if not W then print("[Stryker] build failed at stage "..tostring(av.stage)..": "..tostring(bF))if eP then
-R("Stryker failed to build ("..tostring(av.stage).."): "..tostring(bF),eO)end;if a[ay]==av then a[ay]=nil end;au(av)end;return W end;local function eV()local eq=0;for Y,av in pairs(a)do if aB(av)then
-eq=eq+1 end end;return eq end;local function eW(eO)local eX={}for Y,av in pairs(a)do eX[av.car]=true end;pcall(function()for Y,O in ipairs(aI():GetChildren())do if O.Name==eO.."_Stryker"and not
-eX[O]then as(O)end end end)end;local eY={}local function eZ(T)local em=tick()if eY[T]and em-eY[T]<l.b then R("Wait a few seconds before spawning another Stryker.",T)return end;local e_=_(T)if not e_
-then R("Couldn't find where you are. Respawn and try :spawn stryker again.",T)return end;for ay,av in pairs(a)do if av.owner==T then ax(ay)end end;eW(T)if eV()>=l.a then
-R("There are already "..l.a.." Strykers out. Remove one before spawning another.",T)return end;eY[T]=em;local f0=(e_*CFrame.new(0,0,-26)).Position;local eT=aq(f0)or
-f0-Vector3.new(0,3,0)eU(T,T,F(eT+Vector3.new(0,0.3,0),e_.LookVector),true)end;local function f1(f2)if f2==nil then return nil end;local W,A,z,cc=pcall(function()return f2.X,f2.Y,f2.Z end)if not(W and
-type(A)=="number"and type(z)=="number"and type(cc)=="number")then W,A,z,cc=pcall(function()return f2[1],f2[2],f2[3]end)end;if W and type(A)=="number"and type(z)=="number"and type(cc)=="number"then
-return Vector3.new(A,z,cc)end;return nil end;local function f3(T,f4)for Y,av in pairs(a)do local ey=false;pcall(function()ey=aB(av)and bx(av.allSeats[2].seat,T)end)if ey then local ev=f1(f4)if x.t and
-ev and not ex(av,ev)then av.aimAt={point=ev,by=T,giveUp=tick()+x.v}else bL(av,T)end;return end end end;local function f5(T,dt)local G=a2(T)if not G then return end;local aa,ab=nil,50;for Y,av in
-pairs(a)do if av.chassis and aB(av)then local ad=(av.chassis.Position-G).Magnitude;if ad<ab then aa,ab=av,ad end end end;if not aa then
+c0=Instance.new("Model")c0.Name=eO.."_Stryker"f(c0)local av={key=ay,car=c0,carName=c0.Name,owner=eO,seats={},aboard={},parts={},own={},extras={},build=ay.."@"..string.format("%d",
+math.floor(tick()*1000)%1000000000).."-"..math.random(1,99999)}a[ay]=av;local W,bF=pcall(eN,eO,c0,ca,av,eP)if not W then
+print("[Stryker] build failed at stage "..tostring(av.stage)..": "..tostring(bF))if eP then R("Stryker failed to build ("..tostring(av.stage).."): "..tostring(bF),eO)end;if a[ay]==av then a[ay]=nil
+end;au(av)end;return W end;local function eV()local eq=0;for Y,av in pairs(a)do if aB(av)then eq=eq+1 end end;return eq end;local function eW(eO)local eX={}for Y,av in pairs(a)do eX[av.car]=true end;
+pcall(function()for Y,O in ipairs(aI():GetChildren())do if O.Name==eO.."_Stryker"and not eX[O]then as(O)end end end)end;local eY={}local function eZ(T)local em=tick()if eY[T]and em-eY[T]<l.b then
+R("Wait a few seconds before spawning another Stryker.",T)return end;local e_=_(T)if not e_ then R("Couldn't find where you are. Respawn and try :spawn stryker again.",T)return end;for ay,av in
+pairs(a)do if av.owner==T then ax(ay)end end;eW(T)if eV()>=l.a then R("There are already "..l.a.." Strykers out. Remove one before spawning another.",T)return end;eY[T]=em;local f0=(e_*CFrame.new(0,
+0,-26)).Position;local eT=aq(f0)or f0-Vector3.new(0,3,0)eU(T,T,F(eT+Vector3.new(0,0.3,0),e_.LookVector),true)end;local function f1(f2)if f2==nil then return nil end;local W,A,z,
+cc=pcall(function()return f2.X,f2.Y,f2.Z end)if not(W and type(A)=="number"and type(z)=="number"and type(cc)=="number")then W,A,z,cc=pcall(function()return f2[1],f2[2],f2[3]end)end;if W and
+type(A)=="number"and type(z)=="number"and type(cc)=="number"then return Vector3.new(A,z,cc)end;return nil end;local function f3(T,f4)for Y,av in pairs(a)do local ey=false;pcall(function()ey=aB(av)and
+bx(av.allSeats[2].seat,T)end)if ey then local ev=f1(f4)if x.t and ev and not ex(av,ev)then av.aimAt={point=ev,by=T,giveUp=tick()+x.v}else bL(av,T)end;return end end end;local function f5(T,dt)local
+G=a2(T)if not G then return end;local aa,ab=nil,50;for Y,av in pairs(a)do if av.chassis and aB(av)then local ad=(av.chassis.Position-G).Magnitude;if ad<ab then aa,ab=av,ad end end end;if not aa then
 R("No Stryker close enough. Walk up to one and try again.",T)return end;if aa.aboard[T]then R("Hop out of your seat first (Space), then try again.",T)return end;local f6={}if dt=="driver"then
 f6={aa.allSeats[1]}elseif dt=="commander"then f6={aa.allSeats[2]}else for d0=3,#aa.allSeats do table.insert(f6,aa.allSeats[d0])end end;for Y,dB in ipairs(f6)do if not dB.seat.Occupant and not
-a5(dB.seat)then bO(dB.seat,T,T)return end end;R("That seat is taken.",T)end;local function f7(eO)local ay,eq=eO,2;while a[ay]do ay=eO.."#"..eq;eq=eq+1 end;return ay end;local function f8(ah)local
-W,a0=pcall(function()return ah.Name end)if W and type(a0)=="string"then return string.match(a0,"^(.+)_Stryker$")end;return nil end;local function f9(ah)local W,fa=pcall(function()local
-ep=Vector3.new(0,0,0)local fb=Vector3.new(0,0,0)local e2={}for Y,ad in ipairs(ah:GetDescendants())do if ad.Name=="RoadWheel"or ad.Name=="RoadWheelRear"then
-table.insert(e2,ad.Position)ep=ep+ad.Position;if ad.Name=="RoadWheelRear"then fb=fb+ad.CFrame.RightVector end end end;if#e2<6 then return nil end;local fc=ep/#e2;for Y,Z in ipairs(e2)do
-if(Z-fc).Magnitude>20 then return nil end end;local I=Vector3.new(fb.X,0,fb.Z)if I.Magnitude<0.1 then return nil end;local H=Vector3.new(0,1,0):Cross(I.Unit)local e1=0;for Y,cc in ipairs(w.g)do
-e1=e1+cc end;e1=e1/#w.g;return F(fc-Vector3.new(0,w.d*b,0)+H*e1*b,H)end)if W then return fa end;return nil end;local function fd(fe)for Y,av in pairs(a)do pcall(function()av.car.Name=av.carName..fe;if
-av.marker then av.marker.Name=i..fe end end)end end;local function ff()local fg={}fd("#live")local fh=pcall(function()for Y,O in ipairs(aI():GetChildren())do if O.Name==i then local
-fi=nil;pcall(function()fi=O:GetAttribute("StrykerOwner")end)table.insert(fg,{marker=O,model=false,root=O.CFrame,owner=fi})elseif f8(O)and O:IsA("Model")then local eQ=O:FindFirstChild(i)if eQ then
-table.insert(fg,{marker=eQ,model=O,root=eQ.CFrame})else table.insert(fg,{marker=false,model=O,root=false})end end end end)if not fh then for Y=1,100 do local fj=f(i)if not fj then break
-end;fj.Name=i.."#taken"local ah=fj.Parent;if not f8(ah)then ah=false end;table.insert(fg,{marker=fj,model=ah,root=fj.CFrame})end end;fd("")return fg end;local
-fk={RoadWheel=true,RoadWheelRear=true,LowerWall=true,RearPillar=true,FloorMat=true,BulkheadLiner=true,Ramp=true,DriverSeat=true,CommanderSeat=true,TroopSeat=true,ArmourTile=true,BowTile=true,GlacisTile=true,LugNut=true,TyreValve=true,HubCap=true,UpperGlacis=true,LowerGlacis=true,SponsonFloor=true,WallLiner=true,RoofLiner=true,RampHeader=true,RampLiner=true,RampDoor=true,RampDoorSeam=true,RampDoorHinge=true,RampVisionBlock=true,RampHandle=true,RampHinge=true,RampLock=true,RampTread=true,DriverHatchRing=true,DriverHatch=true,DriverHatchHinge=true,DriverHatchHandle=true,DriverPeriscope=true,PeriscopeHood=true,CommanderRing=true,CommanderHatch=true,CommanderHatchHinge=true,CommanderHatchHandle=true,TroopHatchFrame=true,TroopHatch=true,TroopHatchHinge=true,TroopHatchHandle=true,TroopHatchLatch=true,TroopHatchVision=true,RwsBase=true,RwsMount=true,RwsPedestal=true,RwsCable=true,RwsJunctionBox=true,RwsYoke=true,RwsSmokeTube=true,RwsAmmoCan=true,RwsAmmoLid=true,RwsFeedChute=true,RwsCradle=true,RwsReceiver=true,RwsFeedCover=true,RwsChargingHandle=true,RwsJacket=true,RwsJacketHole=true,RwsBarrel=true,RwsCarryHandle=true,RwsCarryHandlePost=true,RwsFrontSight=true,RwsFlashHider=true,RwsSight=true,RwsSightArm=true,RwsSunshade=true,RwsDayCamera=true,RwsThermal=true,RwsLaser=true,BenchFrame=true,BenchBack=true,SeatDivider=true,TroopSeatBack=true,DriverDoor=true,CommanderDoor=true,RearDoor=true,AimDot=true}local
-function fl()local fm=0;pcall(function()for Y,O in ipairs(aI():GetChildren())do local fn=false;for Y,av in pairs(a)do if az(av,O)then fn=true end end;local
-fo=false;pcall(function()fo=O:GetAttribute("StrykerBuild")~=nil end)local fp=fk[O.Name]and O:IsA("BasePart")and O.Massless==true;if not fn and(fo or fp)then as(O)fm=fm+1;if fm%100==0 then
-task.wait(0.03)end end end end)return fm end;local function fq()pcall(function()o.stamp=math.floor(tick())local
-fr=Instance.new("Part")fr.Name=o.PREFIX..o.REVISION.."#"..string.format("%d",o.stamp).."-"..math.random(1,999999)fr.Size=Vector3.new(0.2,0.2,0.2)fr.Transparency=1;fr.Anchored=true;fr.CanCollide=false;fr.CanQuery=false;fr.CanTouch=false;fr.CFrame=CFrame.new(0,3000,0)f(fr)o.name=fr.Name;o.token=fr
-end)end;local function fs()local ft={}pcall(function()for Y,O in ipairs(aI():GetChildren())do local fu,fv=string.match(O.Name,"^StrykerAddon#(%d+)#(%d+)")if fu and O.Name~=o.name then
-fu,fv=tonumber(fu),tonumber(fv)if fu>o.REVISION or fu==o.REVISION and fv>o.stamp then table.insert(ft,O)else as(O)end end end end)return ft end;local function fw()o.stamp=math.floor(tick())if#fs()>0
-then o.retired=true;print("[Stryker] a newer copy of this addon is running, so this one stays inactive")return false end;fq()return true end;local function fx()if o.retired then return false end;local
-fy=false;pcall(function()fy=o.token and o.token.Parent~=nil and o.token.Name==o.name end)if fy then return true end;if#fs()>0 then
-o.retired=true;print("[Stryker] a newer copy of this addon took over, so this one goes inactive")return false end;local fv=o.stamp;fq()o.stamp=fv;return true end;local function fz()if not fx()then
-return 0 end;local fA={}for ay,av in pairs(a)do if aB(av)then fA[av.owner]=true else a[ay]=nil end end;local fg=ff()local fB,fC=0,0;for Y,fD in ipairs(fg)do local eO=fD.owner;local ca=fD.root;if
-fD.model then eO=f8(fD.model)or eO;local fa=f9(fD.model)if fa and not ca then ca=fa end end;as(fD.model)as(fD.marker)if not eO then fC=fC+1;eO="Saved"..fC end;if ca and not fA[eO]then fA[eO]=true;if
-eU(f7(eO),eO,ca*CFrame.new(0,0.5,0),false)then fB=fB+1 end end end;return fB end;local fE={a=8,b=3,c=60,d=20}fw()task.spawn(function()task.wait(fE.a)local fF,fG=-1,0;for Y=1,fE.c do local
-em=0;pcall(function()em=#aI():GetChildren()end)if em==fF then fG=fG+1 else fG=0 end;fF=em;if fG>=fE.b then break end;task.wait(1)end;for fH=1,2 do if fH==2 then task.wait(fE.d)end;if not fx()then
-return end;local W,eq=pcall(fz)local fm=fl()if not W then print("[Stryker] restore pass failed: "..tostring(eq))elseif eq>0 or fm>0 then
+a5(dB.seat)then bO(dB.seat,T,T)return end end;R("That seat is taken.",T)end;local function f7(eO)local ay,eq=eO,2;while a[ay]do ay=eO.."#"..eq;eq=eq+1 end;return ay end;local function f8(ah)local W,
+a0=pcall(function()return ah.Name end)if W and type(a0)=="string"then return string.match(a0,"^(.+)_Stryker$")end;return nil end;local function f9(ah)local W,fa=pcall(function()local ep=Vector3.new(0,
+0,0)local fb=Vector3.new(0,0,0)local e2={}for Y,ad in ipairs(ah:GetDescendants())do if ad.Name=="RoadWheel"or ad.Name=="RoadWheelRear"then table.insert(e2,ad.Position)ep=ep+ad.Position;if
+ad.Name=="RoadWheelRear"then fb=fb+ad.CFrame.RightVector end end end;if#e2<6 then return nil end;local fc=ep/#e2;for Y,Z in ipairs(e2)do if(Z-fc).Magnitude>20 then return nil end end;local
+I=Vector3.new(fb.X,0,fb.Z)if I.Magnitude<0.1 then return nil end;local H=Vector3.new(0,1,0):Cross(I.Unit)local e1=0;for Y,cc in ipairs(w.g)do e1=e1+cc end;e1=e1/#w.g;return F(fc-Vector3.new(0,w.d*b,
+0)+H*e1*b,H)end)if W then return fa end;return nil end;local function fd(fe)for Y,av in pairs(a)do pcall(function()av.car.Name=av.carName..fe;if av.marker then av.marker.Name=i..fe end end)end end;
+local function ff()local fg={}fd("#live")local fh=pcall(function()for Y,O in ipairs(aI():GetChildren())do if O.Name==i then local fi=nil;
+pcall(function()fi=O:GetAttribute("StrykerOwner")end)table.insert(fg,{marker=O,model=false,root=O.CFrame,owner=fi})elseif f8(O)and O:IsA("Model")then local eQ=O:FindFirstChild(i)if eQ then
+table.insert(fg,{marker=eQ,model=O,root=eQ.CFrame})else table.insert(fg,{marker=false,model=O,root=false})end end end end)if not fh then for Y=1,100 do local fj=f(i)if not fj then break end;
+fj.Name=i.."#taken"local ah=fj.Parent;if not f8(ah)then ah=false end;table.insert(fg,{marker=fj,model=ah,root=fj.CFrame})end end;fd("")return fg end;local fk={RoadWheel=true,RoadWheelRear=true,
+LowerWall=true,RearPillar=true,FloorMat=true,BulkheadLiner=true,Ramp=true,DriverSeat=true,CommanderSeat=true,TroopSeat=true,ArmourTile=true,BowTile=true,GlacisTile=true,LugNut=true,TyreValve=true,
+HubCap=true,UpperGlacis=true,LowerGlacis=true,SponsonFloor=true,WallLiner=true,RoofLiner=true,RampHeader=true,RampLiner=true,RampDoor=true,RampDoorSeam=true,RampDoorHinge=true,RampVisionBlock=true,
+RampHandle=true,RampHinge=true,RampLock=true,RampTread=true,DriverHatchRing=true,DriverHatch=true,DriverHatchHinge=true,DriverHatchHandle=true,DriverPeriscope=true,PeriscopeHood=true,
+CommanderRing=true,CommanderHatch=true,CommanderHatchHinge=true,CommanderHatchHandle=true,TroopHatchFrame=true,TroopHatch=true,TroopHatchHinge=true,TroopHatchHandle=true,TroopHatchLatch=true,
+TroopHatchVision=true,RwsBase=true,RwsMount=true,RwsPedestal=true,RwsCable=true,RwsJunctionBox=true,RwsYoke=true,RwsSmokeTube=true,RwsAmmoCan=true,RwsAmmoLid=true,RwsFeedChute=true,RwsCradle=true,
+RwsReceiver=true,RwsFeedCover=true,RwsChargingHandle=true,RwsJacket=true,RwsJacketHole=true,RwsBarrel=true,RwsCarryHandle=true,RwsCarryHandlePost=true,RwsFrontSight=true,RwsFlashHider=true,
+RwsSight=true,RwsSightArm=true,RwsSunshade=true,RwsDayCamera=true,RwsThermal=true,RwsLaser=true,BenchFrame=true,BenchBack=true,SeatDivider=true,TroopSeatBack=true,DriverDoor=true,CommanderDoor=true,
+RearDoor=true,AimDot=true}local function fl()local fm=0;pcall(function()for Y,O in ipairs(aI():GetChildren())do local fn=false;for Y,av in pairs(a)do if az(av,O)then fn=true end end;local fo=false;
+pcall(function()fo=O:GetAttribute("StrykerBuild")~=nil end)local fp=fk[O.Name]and O:IsA("BasePart")and O.Massless==true;if not fn and(fo or fp)then as(O)fm=fm+1;if fm%100==0 then task.wait(0.03)end
+end end end)return fm end;local function fq()pcall(function()o.stamp=math.floor(tick())local fr=Instance.new("Part")fr.Name=o.PREFIX..o.REVISION.."#"..string.format("%d",o.stamp).."-"..math.random(1,
+999999)fr.Size=Vector3.new(0.2,0.2,0.2)fr.Transparency=1;fr.Anchored=true;fr.CanCollide=false;fr.CanQuery=false;fr.CanTouch=false;fr.CFrame=CFrame.new(0,3000,0)f(fr)o.name=fr.Name;o.token=fr end)end;
+local function fs()local ft={}pcall(function()for Y,O in ipairs(aI():GetChildren())do local fu,fv=string.match(O.Name,"^StrykerAddon#(%d+)#(%d+)")if fu and O.Name~=o.name then fu,fv=tonumber(fu),
+tonumber(fv)if fu>o.REVISION or fu==o.REVISION and fv>o.stamp then table.insert(ft,O)else as(O)end end end end)return ft end;local function fw()o.stamp=math.floor(tick())if#fs()>0 then o.retired=true;
+print("[Stryker] a newer copy of this addon is running, so this one stays inactive")return false end;fq()return true end;local function fx()if o.retired then return false end;local fy=false;
+pcall(function()fy=o.token and o.token.Parent~=nil and o.token.Name==o.name end)if fy then return true end;if#fs()>0 then o.retired=true;
+print("[Stryker] a newer copy of this addon took over, so this one goes inactive")return false end;local fv=o.stamp;fq()o.stamp=fv;return true end;local function fz()if not fx()then return 0 end;
+local fA={}for ay,av in pairs(a)do if aB(av)then fA[av.owner]=true else a[ay]=nil end end;local fg=ff()local fB,fC=0,0;for Y,fD in ipairs(fg)do local eO=fD.owner;local ca=fD.root;if fD.model then
+eO=f8(fD.model)or eO;local fa=f9(fD.model)if fa and not ca then ca=fa end end;as(fD.model)as(fD.marker)if not eO then fC=fC+1;eO="Saved"..fC end;if ca and not fA[eO]then fA[eO]=true;if eU(f7(eO),eO,
+ca*CFrame.new(0,0.5,0),false)then fB=fB+1 end end end;return fB end;local fE={a=8,b=3,c=60,d=20}fw()task.spawn(function()task.wait(fE.a)local fF,fG=-1,0;for Y=1,fE.c do local em=0;
+pcall(function()em=#aI():GetChildren()end)if em==fF then fG=fG+1 else fG=0 end;fF=em;if fG>=fE.b then break end;task.wait(1)end;for fH=1,2 do if fH==2 then task.wait(fE.d)end;if not fx()then return
+end;local W,eq=pcall(fz)local fm=fl()if not W then print("[Stryker] restore pass failed: "..tostring(eq))elseif eq>0 or fm>0 then
 print("[Stryker] restored "..eq.." saved Strykers, cleared "..fm.." loose leftovers")end end end)event("mousedown",function(fI)local T,f4=nil,nil;pcall(function()T=fI.Value[1]f4=fI.Value[3]end)if
-type(T)=="string"and not o.retired then task.spawn(f3,T,f4)end end)local function fJ(T)local dY="in charge"if not fx()then
-dY="INACTIVE (another copy of this addon is in charge)"end;R("Stryker addon rev "..o.REVISION..": "..dY..", "..eV().." built.",T)end;local function fK(T)local G=a2(T)local aa,ab=nil,math.huge;for Y,av
-in pairs(a)do local ad=0;pcall(function()ad=(av.chassis.Position-G).Magnitude end)if ad<ab then aa,ab=av,ad end end;if not aa then
-R("Stryker debug: no Stryker is running in this copy of the addon. Rev "..o.REVISION..(fx()and", in charge."or", INACTIVE (another copy is in charge)."),T)return end;local fL,em=aa,tick()local
-fM=0;for Y,Z in ipairs(fL.parts or{})do local Q=false;pcall(function()Q=Z.Parent==fL.car end)if Q then fM=fM+1 end end;local function dB(d0)local fN=fL.allSeats and fL.allSeats[d0]if not fN then
+type(T)=="string"and not o.retired then task.spawn(f3,T,f4)end end)local function fJ(T)local dY="in charge"if not fx()then dY="INACTIVE (another copy of this addon is in charge)"end;
+R("Stryker addon rev "..o.REVISION..": "..dY..", "..eV().." built.",T)end;local function fK(T)local G=a2(T)local aa,ab=nil,math.huge;for Y,av in pairs(a)do local ad=0;
+pcall(function()ad=(av.chassis.Position-G).Magnitude end)if ad<ab then aa,ab=av,ad end end;if not aa then
+R("Stryker debug: no Stryker is running in this copy of the addon. Rev "..o.REVISION..(fx()and", in charge."or", INACTIVE (another copy is in charge)."),T)return end;local fL,em=aa,tick()local fM=0;
+for Y,Z in ipairs(fL.parts or{})do local Q=false;pcall(function()Q=Z.Parent==fL.car end)if Q then fM=fM+1 end end;local function dB(d0)local fN=fL.allSeats and fL.allSeats[d0]if not fN then
 return"missing"end;local fO,en,ct="empty",0,0;pcall(function()if fN.seat.Occupant then fO=a5(fN.seat)or"someone (name unreadable)"end;en,ct=fN.seat.Throttle,fN.seat.Steer end)return
 fO.." (W/S "..tostring(en)..", A/D "..tostring(ct)..")"end;local fP=fL.drive or{}local
-bJ={"Stryker debug ("..fL.owner..", rev "..o.REVISION.."): alive "..tostring(aB(fL))..", build stage "..tostring(fL.stage)..", "..#(fL.parts
-or{}).." parts, "..fM.." inside the model.","Loops: drive "..(fL.beatDrive and string.format("%.1fs ago",em-fL.beatDrive)or"NEVER RAN")..", gun/ramp "..(fL.beatStation and
-string.format("%.1fs ago",em-fL.beatStation)or"NEVER RAN")..". Last error: "..tostring(fL.lastError or"none"),"Driving: speed "..string.format("%.1f",fL.speed or
-0)..", on ground "..tostring(fP.grounded)..", wall ahead "..tostring(fL.blocked)..", chassis anchored "..tostring(fL.chassis and
-fL.chassis.Anchored),"Seats: driver "..dB(1).."; commander "..dB(2).."; ramp open "..tostring(fL.rampOpen)..", prompts "..tostring(fL.prompts~=nil)}for Y,fQ in ipairs(bJ)do
-print("[Stryker] "..fQ)R(fQ,T)end end;local fR=-1000;event("chatted",function(fI)local T=fI.Value[1]local S=fI.Value[2]if type(T)~="string"or type(S)~="string"then return end;local
-fS=string.match(string.lower(S),"^%s*(.-)%s*$")if fS==":vehicles"then task.spawn(fJ,T)return end;if string.sub(fS,1,1)~=":"or not fx()then return end;if fS==":spawn stryker"then task.spawn(eZ,T)elseif
-fS==":fire"then task.spawn(f3,T)elseif fS==":cleanup vehicles"then if tick()-fR<l.c then R("Cleanup ran recently. Try again in a bit.",T)return end;fR=tick()task.spawn(function()local fT=fz()local
-fm=fl()R("Stryker: "..fT.." rebuilt, "..fm.." loose leftovers cleared.",T)end)else local dt=string.match(fS,"^:stryker (%a+)$")if dt=="driver"or dt=="commander"or dt=="board"then
-task.spawn(f5,T,dt)elseif dt=="debug"then task.spawn(fK,T)end end end)print("[Stryker] rev 15 loaded: full file pasted, ready for :spawn stryker")
+bJ={"Stryker debug ("..fL.owner..", rev "..o.REVISION.."): alive "..tostring(aB(fL))..", build stage "..tostring(fL.stage)..", "..#(fL.parts or{}).." parts, "..fM.." inside the model.",
+"Loops: drive "..(fL.beatDrive and string.format("%.1fs ago",em-fL.beatDrive)or"NEVER RAN")..", gun/ramp "..(fL.beatStation and string.format("%.1fs ago",
+em-fL.beatStation)or"NEVER RAN")..". Last error: "..tostring(fL.lastError or"none"),"Driving: speed "..string.format("%.1f",fL.speed or
+0)..", on ground "..tostring(fP.grounded)..", wall ahead "..tostring(fL.blocked)..", chassis anchored "..tostring(fL.chassis and fL.chassis.Anchored),
+"Seats: driver "..dB(1).."; commander "..dB(2).."; ramp open "..tostring(fL.rampOpen)..", prompts "..tostring(fL.prompts~=nil)}for Y,fQ in ipairs(bJ)do print("[Stryker] "..fQ)R(fQ,T)end end;local
+fR=-1000;event("chatted",function(fI)local T=fI.Value[1]local S=fI.Value[2]if type(T)~="string"or type(S)~="string"then return end;local fS=string.match(string.lower(S),"^%s*(.-)%s*$")if
+fS==":vehicles"then task.spawn(fJ,T)return end;if string.sub(fS,1,1)~=":"or not fx()then return end;if fS==":spawn stryker"then task.spawn(eZ,T)elseif fS==":fire"then task.spawn(f3,T)elseif
+fS==":cleanup vehicles"then if tick()-fR<l.c then R("Cleanup ran recently. Try again in a bit.",T)return end;fR=tick()task.spawn(function()local fT=fz()local
+fm=fl()R("Stryker: "..fT.." rebuilt, "..fm.." loose leftovers cleared.",T)end)else local dt=string.match(fS,"^:stryker (%a+)$")if dt=="driver"or dt=="commander"or dt=="board"then task.spawn(f5,T,
+dt)elseif dt=="debug"then task.spawn(fK,T)end end end)print("[Stryker] rev 15 loaded: full file pasted, ready for :spawn stryker")
