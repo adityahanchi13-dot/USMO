@@ -1,6 +1,7 @@
 -- Abrams addon, DETAILED MODEL + SIMPLE LOGIC.
 -- Detailed hull, running gear, skirts, turret, stowage, gun (from the old detailed file),
--- but only driving and turret aiming. No combat, no saving, no wrecks, no NPCs.
+-- but only driving and turret aiming. Road wheels, idlers and sprockets spin with their tracks, and the
+-- tracks kick up dust. No combat, no saving, no wrecks, no NPCs.
 -- Commands: :spawn abrams, :cleanup vehicles
 
 local Tanks = {}
@@ -91,7 +92,7 @@ end
 
 -- ===== BUILD KIT =====
 local function newKit(model, root)
-  local k = { parts = {}, dust = {} }
+  local k = { parts = {}, dust = {}, spinners = {} }
   function k.at(x, y, z) return root * CFrame.new(x*SCALE, y*SCALE, z*SCALE) end
   function k.off(x, y, z) return CFrame.new(x*SCALE, y*SCALE, z*SCALE) end
   function k.facing(x, y, z, dx, dy, dz)
@@ -127,6 +128,18 @@ local function newKit(model, root)
   end
   function k.bolt(cf, weldTo)
     return k.cylinder("Bolt", 0.06, 0.14, cf, COLOR.TAN_DARK, MAT.METAL, weldTo)
+  end
+  -- (new) a road wheel, idler or sprocket that spins with its track: held to the chassis by a Weld
+  -- (instead of a WeldConstraint) so the drive loop can turn it. `part` must be built unrotated.
+  function k.axle(part, x, y, z, side, radius)
+    local j = Instance.new("Weld")
+    j.Name = "Axle"
+    j.Part0 = k.chassis
+    j.Part1 = part
+    j.C0 = k.off(x, y - DIM.CHASSIS_Y, z - DIM.CHASSIS_Z)
+    j.C1 = CFrame.new()
+    j.Parent = k.chassis
+    table.insert(k.spinners, { weld = j, base = j.C0, side = side, radius = radius })
   end
   function k.seat(class, name, cf, weldTo)
     local s = k.make(class, name, Vector3.new(1.5, 0.4, 1.4), cf, COLOR.BLACK, MAT.FABRIC, weldTo, false)
@@ -295,7 +308,7 @@ local function buildRunningGear(k, s)
     local wheel = cylinder("RoadWheel", 0.75, DIM.WHEEL_R * 2, at(outX, wy, wz), COLOR.RUBBER, MAT.RUBBER, false)
     wheel.CanCollide = true
     wheel.CustomPhysicalProperties = iceFriction
-    weldConstraint(c, wheel)
+    k.axle(wheel, outX, wy, wz, s, DIM.WHEEL_R)
     cylinder("RoadWheelInner", 0.75, DIM.WHEEL_R * 2, at(inX, wy, wz), COLOR.RUBBER, MAT.RUBBER, wheel)
     cylinder("RoadWheelFace", 0.06, 1.6, at(faceX + s * 0.03, wy, wz), COLOR.TAN, MAT.SMOOTH, wheel)
     cylinder("RoadWheelHub", 0.12, 0.7, at(faceX + s * 0.1, wy, wz), COLOR.TAN_DARK, MAT.METAL, wheel)
@@ -316,7 +329,7 @@ local function buildRunningGear(k, s)
   local idler = cylinder("Idler", 0.75, DIM.IDLER_R * 2, at(outX, iy, iz), COLOR.TAN_DARK, MAT.METAL, false)
   idler.CanCollide = true
   idler.CustomPhysicalProperties = iceFriction
-  weldConstraint(c, idler)
+  k.axle(idler, outX, iy, iz, s, DIM.IDLER_R)
   cylinder("IdlerInner", 0.75, DIM.IDLER_R * 2, at(inX, iy, iz), COLOR.TAN_DARK, MAT.METAL, idler)
   cylinder("IdlerFace", 0.06, 1.5, at(faceX + s * 0.03, iy, iz), COLOR.TAN, MAT.SMOOTH, idler)
   for b = 0, 4 do
@@ -332,7 +345,7 @@ local function buildRunningGear(k, s)
   local sprocket = cylinder("Sprocket", 0.4, 2.0, at(ringX, sy, sz), COLOR.TAN_DARK, MAT.METAL, false)
   sprocket.CanCollide = true
   sprocket.CustomPhysicalProperties = iceFriction
-  weldConstraint(c, sprocket)
+  k.axle(sprocket, ringX, sy, sz, s, DIM.SPROCKET_R)
   cylinder("SprocketInner", 0.4, 2.0, at(s * (DIM.TRACK_X - 0.55), sy, sz), COLOR.TAN_DARK, MAT.METAL, sprocket)
   cylinder("SprocketFace", 0.06, 1.7, at(s * (DIM.TRACK_X + 0.78), sy, sz), COLOR.TAN, MAT.SMOOTH, sprocket)
   cylinder("SprocketHub", 0.16, 0.8, at(s * (DIM.TRACK_X + 0.89), sy, sz), COLOR.STEEL, MAT.METAL, sprocket)
@@ -673,14 +686,26 @@ local function buildTank(owner, root, entry)
   end
 
   -- ===== DRIVE LOOP (Humvee pattern) =====
+  -- (new, from the old detailed tank) each track runs at its own speed, faster on the outside of a turn and
+  -- backwards when pivoting; its road wheels, idler and sprocket spin to match, and dust kicks up behind.
+  local spinners = k.spinners
+  local dust = k.dust
+  local halfTrack = DIM.TRACK_X * SCALE
   task.spawn(function()
     local speed = 0
     local turn = 0
     local wasManned = false
+    local last = tick()
+    local rolled = { [-1] = 0, [1] = 0 } -- distance each track has run, studs
+    local lastSpin, lastDust = 0, 0
+    local dustOn = false
     while car.Parent do
       local driving = driverSeat.Occupant ~= nil
       -- (fix) full speed only while driven or still moving; four checks a second when parked
-      if driving or speed ~= 0 then task.wait(0.03) else task.wait(0.25) end
+      if driving or speed ~= 0 or turn ~= 0 then task.wait(0.03) else task.wait(0.25) end
+      local now = tick()
+      local dt = math.min(now - last, 0.3)
+      last = now
 
       local manned = driving or gunnerSeat.Occupant ~= nil
       if manned and not wasManned then wake() end
@@ -694,6 +719,7 @@ local function buildTank(owner, root, entry)
         speed = speed + (targetSpeed - speed) * ACCELERATION
         if throttle == 0 and math.abs(speed) < 0.05 then speed = 0 end
         turn  = turn  + (-steer * TURN_RATE - turn) * 0.15
+        if steer == 0 and math.abs(turn) < 0.002 then turn = 0 end
       else
         speed = speed * 0.9
         if math.abs(speed) < 0.05 then speed = 0 end
@@ -704,6 +730,36 @@ local function buildTank(owner, root, entry)
           chassis.CFrame.LookVector * speed + Vector3.new(0, chassis.AssemblyLinearVelocity.Y, 0)
         chassis.AssemblyAngularVelocity = Vector3.new(0, turn, 0)
       end)
+
+      local left = speed - turn * halfTrack
+      local right = speed + turn * halfTrack
+      rolled[-1] = rolled[-1] + left * dt
+      rolled[1] = rolled[1] + right * dt
+      -- wheels redraw 10 times a second, and only while a track is moving
+      if now - lastSpin >= 0.1 and (math.abs(left) > 0.05 or math.abs(right) > 0.05) then
+        lastSpin = now
+        pcall(function()
+          for _, sp in ipairs(spinners) do
+            sp.weld.C0 = sp.base * CFrame.Angles(-rolled[sp.side] / (sp.radius * SCALE), 0, 0)
+          end
+        end)
+      end
+      -- dust: only touched while it's kicking up, or the moment it stops
+      if now - lastDust >= 0.3 then
+        lastDust = now
+        local churn = math.min(1, math.max(math.abs(left), math.abs(right)) / MAX_SPEED)
+        local on = churn > 0.12
+        if on or dustOn then
+          for _, smoke in ipairs(dust) do
+            pcall(function()
+              smoke.Enabled = on
+              smoke.Opacity = 0.05 + 0.2 * churn
+              smoke.Size = 2 + 4 * churn
+            end)
+          end
+        end
+        dustOn = on
+      end
     end
   end)
 
