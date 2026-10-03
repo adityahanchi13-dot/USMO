@@ -140,7 +140,8 @@ local function build(player)
   f(model)
   T.model = model
 
-  part("TestFloor", Vector3.new(10, 0.4, 10), at(0, 0.2, 0), Color3.new(0.5, 0.5, 0.52), model).CanCollide = true
+  local floor = part("TestFloor", Vector3.new(10, 0.4, 10), at(0, 0.2, 0), Color3.new(0.5, 0.5, 0.52), model)
+  floor.CanCollide = true
 
   local seat = Instance.new("VehicleSeat")
   seat.Name = "TestCommanderSeat"
