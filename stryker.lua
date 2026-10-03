@@ -1,4 +1,4 @@
--- Stryker vehicle for Server Addons, rev 15.
+-- Stryker vehicle for Server Addons, rev 16.
 -- Commands: :spawn stryker, :stryker driver|commander|board, :fire, :vehicles, :cleanup vehicles
 --
 -- Driver seat drives. Commander seat aims the .50 cal (A/D traverse, W/S elevate) and fires
@@ -23,11 +23,11 @@ local DETAIL = true -- full detail: bolts, lug nuts, valves, jacket holes
 local LIMITS = { MAX_ACTIVE = 4, SPAWN_COOLDOWN = 15, CLEANUP_COOLDOWN = 30 }
 local PERF = { IDLE_TICK = 0.25, DRIVE_TICK = 0.03, CREW_TICK = 0.25, WHEEL_TICK = 0.1 }
 local DRIVE = {
-  GRAVITY = 196.2, MAX_STEP = 3.5, PROBE_UP = 4, PROBE_DOWN = 10, GROUND_EVERY = 0.5,
+  GRAVITY = 196.2, MAX_STEP = 3.5, PROBE_UP = 4, PROBE_DOWN = 10, GROUND_EVERY = 1.0,
   WALL_HEIGHTS = { 4.0, 7.5 }, WALL_NORMAL_Y = 0.7, TILT_BLEND = 0.25, FALL_LIMIT = -400,
 }
 local COPY = {
-  PREFIX = "StrykerAddon#", REVISION = 15, name = false, root = false, retired = false,
+  PREFIX = "StrykerAddon#", REVISION = 16, name = false, root = false, retired = false,
   token = false, stamp = 0, world = false,
 }
 
@@ -98,12 +98,16 @@ end
 local function place(inst, parent)
   if parent then pcall(function() inst.Parent = parent end) end
   pcall(f, inst)
+  local home = true
   if parent then
-    local home = false
+    home = false
     pcall(function() home = inst.Parent == parent end)
-    if not home then pcall(function() inst.Parent = parent end) end
+    if not home then
+      pcall(function() inst.Parent = parent end)
+      pcall(function() home = inst.Parent == parent end)
+    end
   end
-  return inst
+  return inst, home
 end
 
 local function tell(message, player) pcall(announce, message, player) end
@@ -185,12 +189,6 @@ local function castRay(from, direction, params)
   return nil
 end
 
-local function groundBelow(pos)
-  local hit = castRay(pos + Vector3.new(0, 2, 0), Vector3.new(0, -60, 0), rayParams({}))
-  if hit and type(hit.Instance) ~= "string" then return hit.Position end
-  return nil
-end
-
 local function removePart(p)
   pcall(function() p:Destroy() end)
 end
@@ -203,13 +201,13 @@ local function dispose(inst)
   if stuck then pcall(function() inst.Name = inst.Name .. "#junk" end) end
 end
 
--- Every instance a Stryker owns lives inside its Model, so one Destroy() removes it all.
--- The list is a second net in case anything escaped the model.
+-- One Destroy() on the Model removes everything inside it. Parts that f() left outside the
+-- Model (entry.loose) and the marker / aim dot (entry.extras) are removed one by one.
 local function destroyEntry(entry)
   entry.dead = true
   pcall(function() entry.car:Destroy() end)
   for _, p in ipairs(entry.extras or {}) do dispose(p) end
-  for _, p in ipairs(entry.parts or {}) do
+  for _, p in ipairs(entry.loose or {}) do
     pcall(function() if p.Parent ~= nil then p:Destroy() end end)
     local still = false
     pcall(function() still = p.Parent ~= nil end)
@@ -232,15 +230,14 @@ local function destroyStryker(key)
   end
 end
 
--- Is this instance part of this vehicle? Checked three ways, because in this game f() can move
--- parts out of the vehicle's Model to the map root: the remembered set, the Model, and the
--- StrykerKey attribute stamped on every part.
+-- Is this instance part of this vehicle? In this game f() can move parts out of the vehicle's
+-- Model to the map root, so the remembered set is checked as well as the Model.
 local function isOwn(entry, inst)
   if inst == nil or type(inst) == "string" then return false end
   if entry.own and entry.own[inst] then return true end
   local mine = false
   pcall(function()
-    mine = inst:IsDescendantOf(entry.car) or inst:GetAttribute("StrykerBuild") == entry.build
+    mine = inst:IsDescendantOf(entry.car)
   end)
   return mine
 end
@@ -293,6 +290,16 @@ local function mapRoot()
     end)
   end
   return COPY.root
+end
+
+-- Walk the map's top-level children, pausing every 150 so a big map never stalls the server.
+local function eachRootChild(fn)
+  local children = {}
+  pcall(function() children = mapRoot():GetChildren() end)
+  for i, inst in ipairs(children) do
+    fn(inst)
+    if i % 150 == 0 then task.wait(0.03) end
+  end
 end
 
 local function worldRoot()
@@ -450,7 +457,6 @@ end
 
 local function impact(holder, pos, color, size)
   local p = fxPart(holder, "Impact", true, Vector3.new(size, size, size), CFrame.new(pos), color, 0)
-  glow(p, color, 2, 8)
   fade(p, 0.2, 3)
 end
 
@@ -664,20 +670,24 @@ local function hideAimDot(entry)
   end)
 end
 
+-- Runs a vehicle loop. If it errors it is restarted at most MAX_RESTARTS times (with a pause),
+-- then it stops for good and says why, instead of retrying the same error forever.
+local MAX_RESTARTS = 3
 local function keepRunning(entry, name, fn)
   task.spawn(function()
-    local lastTold, failures = 0, 0
+    local failures = 0
     while alive(entry) do
       local ok, err = pcall(fn)
       if ok then return end
       failures = failures + 1
       entry.lastError = name .. ": " .. tostring(err)
-      print("[Stryker] " .. name .. " loop error: " .. tostring(err))
-      if tick() - lastTold > 10 then
-        lastTold = tick()
-        tell("Stryker " .. name .. " hit an error and restarted: " .. tostring(err), entry.owner)
+      print("[Stryker] " .. name .. " loop error (" .. failures .. "): " .. tostring(err))
+      if failures > MAX_RESTARTS then
+        print("[Stryker] " .. name .. " loop stopped after " .. failures .. " errors")
+        tell("Stryker " .. name .. " stopped after repeated errors: " .. tostring(err), entry.owner)
+        return
       end
-      task.wait(math.min(10, failures)) -- back off instead of spinning on a permanent error
+      task.wait(failures)
     end
   end)
 end
@@ -690,7 +700,7 @@ end
 -- Model if f() moved it. The old code let f() pull parts out to the map root, so car:Destroy()
 -- and the gun's ray filter missed them, and every respawn or save left loose parts behind.
 local function newKit(car, root, entry)
-  local k = { parts = {}, wheels = {}, troopSeats = {} }
+  local k = { parts = {}, wheels = {}, troopSeats = {}, pinned = {} }
   entry.parts = k.parts
   function k.at(x, y, z) return root * CFrame.new(x * SCALE, y * SCALE, z * SCALE) end
   function k.off(x, y, z) return CFrame.new(x * SCALE, y * SCALE, z * SCALE) end
@@ -707,18 +717,17 @@ local function newKit(car, root, entry)
     p.CFrame = cf
     p.Color = color
     p.Material = material
-    p.Anchored = true
+    -- A part welded right away is created unanchored (one write fewer per part); a part that only
+    -- gets its joint later (chassis, tyres, ramp, turret mount, gun cradle) stays anchored until then.
+    p.Anchored = not weldTo
     p.CanCollide = false
     p.CanTouch = false
     p.CanQuery = false
     p.Massless = true
-    place(p, car)
+    local _, home = place(p, car)
+    if not home then table.insert(entry.loose, p) end
     entry.own[p] = true
-    pcall(function()
-      p:SetAttribute("StrykerKey", entry.key)
-      p:SetAttribute("StrykerBuild", entry.build)
-    end)
-    if weldTo then weld(weldTo, p) end
+    if weldTo then weld(weldTo, p) else table.insert(k.pinned, p) end
     table.insert(k.parts, p)
     if #k.parts % 25 == 0 then task.wait(0.03) end
     return p
@@ -1526,6 +1535,7 @@ local function driveStryker(entry)
       end
     end
     if math.abs(speed) > 3 then entry.rampOpen = false end
+    entry.slowTick = math.max(entry.slowTick or 0, tick() - now)
   end
 end
 
@@ -1738,14 +1748,14 @@ local function buildStryker(owner, car, root, entry, dropOwnerIn)
   entry.nextBurst = 0
   addPrompts(entry, anchors)
 
-  -- Unanchor everything except the chassis, last, after every weld exists. The anchored
-  -- chassis carries the welded parts (and seated players) wherever its CFrame is set.
+  -- Release the parts that were held anchored until their joints existed. Only the chassis stays
+  -- anchored: it carries every welded part (and seated players) wherever its CFrame is set.
   local ignore = { car }
   for _, p in ipairs(k.parts) do ignore[#ignore + 1] = p end
   entry.params = rayParams(ignore)
   entry.chassisOffset = k.off(0, DIM.CHASSIS_Y, DIM.CHASSIS_Z)
   entry.drive = { pos = root.Position, heading = headingOf(root), pitch = 0, roll = 0, vy = 0, grounded = false }
-  for _, p in ipairs(k.parts) do
+  for _, p in ipairs(k.pinned) do
     if p ~= chassis then p.Anchored = false end
   end
 
@@ -1768,7 +1778,7 @@ local function buildStryker(owner, car, root, entry, dropOwnerIn)
     end
   end)
 
-  print("[Stryker] built " .. #k.parts .. " parts for " .. owner)
+  print("[Stryker] built " .. #k.parts .. " parts for " .. owner .. " (" .. #entry.loose .. " outside the model)")
   if dropOwnerIn then
     tell(owner .. " deployed a Stryker. Walk up and press E to get in: driver (front left), commander (right side) or board at the ramp.", owner)
   end
@@ -1779,9 +1789,11 @@ local function createStryker(key, owner, root, dropOwnerIn)
   car.Name = owner .. "_Stryker"
   f(car) -- the Model goes into the map first; parts are then parented into it
   local entry = { key = key, car = car, carName = car.Name, owner = owner, seats = {}, aboard = {}, parts = {}, own = {},
-    extras = {}, build = key .. "@" .. string.format("%d", math.floor(tick() * 1000) % 1000000000) .. "-" .. math.random(1, 99999) }
+    extras = {}, loose = {}, build = key .. "@" .. string.format("%d", math.floor(tick() * 1000) % 1000000000) .. "-" .. math.random(1, 99999) }
   Strykers[key] = entry
+  local started = tick()
   local ok, err = pcall(buildStryker, owner, car, root, entry, dropOwnerIn)
+  entry.buildTime = tick() - started
   if not ok then
     print("[Stryker] build failed at stage " .. tostring(entry.stage) .. ": " .. tostring(err))
     if dropOwnerIn then tell("Stryker failed to build (" .. tostring(entry.stage) .. "): " .. tostring(err), owner) end
@@ -1799,14 +1811,27 @@ local function countActive()
   return n
 end
 
+local function setLiveNames(suffix)
+  for _, entry in pairs(Strykers) do
+    pcall(function()
+      entry.car.Name = entry.carName .. suffix
+      if entry.marker then entry.marker.Name = MARKER_NAME .. suffix end
+    end)
+  end
+end
+
 local function clearStrays(owner)
-  local ours = {}
-  for _, entry in pairs(Strykers) do ours[entry.car] = true end
-  pcall(function()
-    for _, inst in ipairs(mapRoot():GetChildren()) do
-      if inst.Name == owner .. "_Stryker" and not ours[inst] then dispose(inst) end
-    end
-  end)
+  setLiveNames("#live") -- live Strykers can't be found by name while we look
+  for _ = 1, 20 do
+    local stray = nil
+    pcall(function() stray = f(owner .. "_Stryker") end)
+    if not stray then break end
+    dispose(stray)
+    local gone = true
+    pcall(function() gone = stray.Parent == nil or stray.Name ~= owner .. "_Stryker" end)
+    if not gone then break end
+  end
+  setLiveNames("")
 end
 
 local lastSpawn = {}
@@ -1832,7 +1857,8 @@ local function spawnStryker(player)
   lastSpawn[player] = now
   local ahead = (playerCF * CFrame.new(0, 0, -26)).Position
   -- Place the wheels on whatever floor is there instead of guessing from the player's height.
-  local ground = groundBelow(ahead) or (ahead - Vector3.new(0, 3, 0))
+  local floor = solidHit(ahead + Vector3.new(0, 2, 0), Vector3.new(0, -60, 0), rayParams({}), nil)
+  local ground = (floor and floor.Position) or (ahead - Vector3.new(0, 3, 0))
   createStryker(player, player, flatFrame(ground + Vector3.new(0, 0.3, 0), playerCF.LookVector), true)
 end
 
@@ -1952,33 +1978,31 @@ local function parkedFromTyres(model)
   return nil
 end
 
-local function setLiveNames(suffix)
-  for _, entry in pairs(Strykers) do
-    pcall(function()
-      entry.car.Name = entry.carName .. suffix
-      if entry.marker then entry.marker.Name = MARKER_NAME .. suffix end
-    end)
-  end
-end
-
 local function findSavedStrykers()
   local jobs = {}
   setLiveNames("#live")
   local scanned = pcall(function()
-    for _, inst in ipairs(mapRoot():GetChildren()) do
-      if inst.Name == MARKER_NAME then
-        local savedOwner = nil
-        pcall(function() savedOwner = inst:GetAttribute("StrykerOwner") end)
-        table.insert(jobs, { marker = inst, model = false, root = inst.CFrame, owner = savedOwner })
-      elseif strykerOwner(inst) and inst:IsA("Model") then
-        local marker = inst:FindFirstChild(MARKER_NAME)
-        if marker then
-          table.insert(jobs, { marker = marker, model = inst, root = marker.CFrame })
-        else
-          table.insert(jobs, { marker = false, model = inst, root = false })
-        end
+    eachRootChild(function(inst)
+      local name = nil
+      pcall(function() name = inst.Name end)
+      if name == MARKER_NAME then
+        pcall(function()
+          local savedOwner = nil
+          pcall(function() savedOwner = inst:GetAttribute("StrykerOwner") end)
+          table.insert(jobs, { marker = inst, model = false, root = inst.CFrame, owner = savedOwner })
+        end)
+      elseif type(name) == "string" and string.match(name, "^(.+)_Stryker$") then
+        pcall(function()
+          if not inst:IsA("Model") then return end
+          local marker = inst:FindFirstChild(MARKER_NAME)
+          if marker then
+            table.insert(jobs, { marker = marker, model = inst, root = marker.CFrame })
+          else
+            table.insert(jobs, { marker = false, model = inst, root = false })
+          end
+        end)
       end
-    end
+    end)
   end)
   if not scanned then
     for _ = 1, 100 do
@@ -1994,45 +2018,62 @@ local function findSavedStrykers()
   return jobs
 end
 
--- Loose parts that older revisions leaked into the map root (f() pulled them out of the Model).
--- Names are Stryker-specific, and only massless parts are touched, so map geometry is safe.
+-- Loose Stryker parts left at the map root (f() can pull parts out of the Model, and a saved
+-- map keeps them). Only massless parts with a Stryker part name are touched, and never one
+-- belonging to (or sitting on) a live Stryker.
 local LEFTOVERS = {
-  RoadWheel = true, RoadWheelRear = true, LowerWall = true, RearPillar = true, FloorMat = true,
-  BulkheadLiner = true, Ramp = true, DriverSeat = true, CommanderSeat = true, TroopSeat = true,
-  ArmourTile = true, BowTile = true, GlacisTile = true, LugNut = true, TyreValve = true, HubCap = true,
-  UpperGlacis = true, LowerGlacis = true, SponsonFloor = true, WallLiner = true, RoofLiner = true,
-  RampHeader = true, RampLiner = true, RampDoor = true, RampDoorSeam = true, RampDoorHinge = true,
-  RampVisionBlock = true, RampHandle = true, RampHinge = true, RampLock = true, RampTread = true,
-  DriverHatchRing = true, DriverHatch = true, DriverHatchHinge = true, DriverHatchHandle = true,
-  DriverPeriscope = true, PeriscopeHood = true, CommanderRing = true, CommanderHatch = true,
-  CommanderHatchHinge = true, CommanderHatchHandle = true, TroopHatchFrame = true, TroopHatch = true,
-  TroopHatchHinge = true, TroopHatchHandle = true, TroopHatchLatch = true, TroopHatchVision = true,
-  RwsBase = true, RwsMount = true, RwsPedestal = true, RwsCable = true, RwsJunctionBox = true, RwsYoke = true,
-  RwsSmokeTube = true, RwsAmmoCan = true, RwsAmmoLid = true, RwsFeedChute = true, RwsCradle = true,
-  RwsReceiver = true, RwsFeedCover = true, RwsChargingHandle = true, RwsJacket = true, RwsJacketHole = true,
-  RwsBarrel = true, RwsCarryHandle = true, RwsCarryHandlePost = true, RwsFrontSight = true,
-  RwsFlashHider = true, RwsSight = true, RwsSightArm = true, RwsSunshade = true, RwsDayCamera = true,
-  RwsThermal = true, RwsLaser = true, BenchFrame = true, BenchBack = true, SeatDivider = true,
-  TroopSeatBack = true, DriverDoor = true, CommanderDoor = true, RearDoor = true, AimDot = true,
+  AimDot = true, AmmoCan = true, Antenna = true, AntennaBase = true, AntennaSpring = true, ArmourTile = true,
+  Axle = true, Bedroll = true, BenchBack = true, BenchFrame = true, BenchLeg = true, BlackoutLight = true,
+  BlackoutTaillight = true, Bolt = true, Bow = true, BowTile = true, BulkheadLiner = true, CanRack = true,
+  CanStrap = true, Chassis = true, CommanderDoor = true, CommanderHatch = true, CommanderHatchHandle = true,
+  CommanderHatchHinge = true, CommanderRing = true, CommanderSeat = true, Differential = true,
+  DomeLight = true, DriverDoor = true, DriverHatch = true, DriverHatchHandle = true, DriverHatchHinge = true,
+  DriverHatchRing = true, DriverPeriscope = true, DriverSeat = true, ExhaustGrille = true,
+  ExhaustOutlet = true, Extinguisher = true, ExtinguisherStrap = true, FirstAidCross = true,
+  FirstAidKit = true, Floor = true, FloorMat = true, FrontSection = true, FuelFiller = true, GPSDome = true,
+  GlacisTile = true, GrabBar = true, GrabBarMount = true, GrabHandle = true, GrabHandlePost = true,
+  GrilleSlat = true, Handrail = true, HandrailBracket = true, Headlight = true, HeadlightHousing = true,
+  Hub = true, HubCap = true, IdPanel = true, IntakeGrille = true, IntakeSlat = true, Intercom = true,
+  JammerMast = true, JammerPaddle = true, Jerrycan = true, LightCageBar = true, LightCageBottom = true,
+  LightCageStrut = true, LightCageTop = true, LightGuard = true, LightGuardPost = true, LowerFront = true,
+  LowerGlacis = true, LowerWall = true, LugNut = true, Mirror = true, MirrorArm = true, MirrorGlass = true,
+  Mudflap = true, PeriscopeHood = true, PickHandle = true, PickHead = true, PintleHook = true,
+  RackPost = true, RackRail = true, Ramp = true, RampDoor = true, RampDoorHinge = true, RampDoorSeam = true,
+  RampHandle = true, RampHeader = true, RampHinge = true, RampLiner = true, RampLock = true,
+  RampTread = true, RampVisionBlock = true, RearCamera = true, RearCameraLens = true, RearDoor = true,
+  RearPillar = true, RearShackle = true, Reflector = true, RifleRack = true, Rim = true, RoadWheel = true,
+  RoadWheelRear = true, Roof = true, RoofLiner = true, Rucksack = true, RwsAmmoCan = true, RwsAmmoLid = true,
+  RwsBarrel = true, RwsBase = true, RwsCable = true, RwsCarryHandle = true, RwsCarryHandlePost = true,
+  RwsChargingHandle = true, RwsCradle = true, RwsDayCamera = true, RwsFeedChute = true, RwsFeedCover = true,
+  RwsFlashHider = true, RwsFrontSight = true, RwsJacket = true, RwsJacketHole = true, RwsJunctionBox = true,
+  RwsLaser = true, RwsMount = true, RwsPedestal = true, RwsReceiver = true, RwsSight = true,
+  RwsSightArm = true, RwsSmokeTube = true, RwsSunshade = true, RwsThermal = true, RwsYoke = true,
+  SeatBelt = true, SeatDivider = true, ShacklePin = true, ShovelBlade = true, ShovelHandle = true,
+  SideStep = true, SmokeBracket = true, SmokeTube = true, SponsonFloor = true, StepHanger = true,
+  Taillight = true, TaillightHousing = true, ToolBracket = true, TowEye = true, TowEyePin = true,
+  TowHook = true, TowPintle = true, TroopHatch = true, TroopHatchFrame = true, TroopHatchHandle = true,
+  TroopHatchHinge = true, TroopHatchLatch = true, TroopHatchVision = true, TroopSeat = true,
+  TroopSeatBack = true, TurnSignal = true, TyreValve = true, UpperGlacis = true, UpperWall = true,
+  VisionBlock = true, WallLiner = true, WaterCan = true, WinchCover = true,
 }
 
 local function clearLeftovers()
   local cleared = 0
-  pcall(function()
-    for _, inst in ipairs(mapRoot():GetChildren()) do
-      local live = false
-      for _, entry in pairs(Strykers) do
-        if isOwn(entry, inst) then live = true end
-      end
-      local stamped = false
-      pcall(function() stamped = inst:GetAttribute("StrykerBuild") ~= nil end)
-      local legacy = LEFTOVERS[inst.Name] and inst:IsA("BasePart") and inst.Massless == true
-      if not live and (stamped or legacy) then
-        dispose(inst)
-        cleared = cleared + 1
-        if cleared % 100 == 0 then task.wait(0.03) end
-      end
+  eachRootChild(function(inst)
+    local name = nil
+    pcall(function() name = inst.Name end)
+    if not LEFTOVERS[name] then return end
+    local candidate = false
+    pcall(function() candidate = inst.Massless == true and inst:IsA("BasePart") end)
+    if not candidate then return end
+    for _, entry in pairs(Strykers) do
+      if isOwn(entry, inst) then return end
+      local near = false
+      pcall(function() near = (inst.Position - entry.chassis.Position).Magnitude < 40 end)
+      if near then return end
     end
+    dispose(inst)
+    cleared = cleared + 1
   end)
   return cleared
 end
@@ -2067,16 +2108,17 @@ end
 -- later) are returned; older ones are deleted on sight.
 local function newerRivals()
   local newer = {}
-  pcall(function()
-    for _, inst in ipairs(mapRoot():GetChildren()) do
-      local rev, stamp = string.match(inst.Name, "^StrykerAddon#(%d+)#(%d+)")
-      if rev and inst.Name ~= COPY.name then
-        rev, stamp = tonumber(rev), tonumber(stamp)
-        if rev > COPY.REVISION or (rev == COPY.REVISION and stamp > COPY.stamp) then
-          table.insert(newer, inst)
-        else
-          dispose(inst)
-        end
+  eachRootChild(function(inst)
+    local name = nil
+    pcall(function() name = inst.Name end)
+    if type(name) ~= "string" then return end
+    local rev, stamp = string.match(name, "^StrykerAddon#(%d+)#(%d+)")
+    if rev and name ~= COPY.name then
+      rev, stamp = tonumber(rev), tonumber(stamp)
+      if rev > COPY.REVISION or (rev == COPY.REVISION and stamp > COPY.stamp) then
+        table.insert(newer, inst)
+      else
+        dispose(inst)
       end
     end
   end)
@@ -2149,31 +2191,35 @@ end
 -- Startup and events
 ---------------------------------------------------------------------------------------------
 
-local STARTUP = { OFFSET = 8, SETTLED = 3, MAX_WAIT = 60, SECOND_PASS = 20 }
+local STARTUP = { OFFSET = 20 }
+do
+  local api = { f = f, raycast = raycast, tween = tween, event = event, announce = announce, getPlayers = getPlayers,
+    getPlayerPosition = getPlayerPosition, setPlayerPosition = setPlayerPosition, getPlayerHealth = getPlayerHealth,
+    damage = damage, kill = kill, getTeam = getTeam }
+  local missing = {}
+  for name, fn in pairs(api) do
+    if type(fn) ~= "function" then table.insert(missing, name) end
+  end
+  if #missing > 0 then
+    print("[Stryker] WARNING: these API functions are missing: " .. table.concat(missing, ", "))
+  else
+    print("[Stryker] API check: all 12 API functions present")
+  end
+end
 claimCopy()
 
--- Wait for the saved map to finish loading, then rebuild saved Strykers in place.
+-- After the saved map has loaded, rebuild saved Strykers in place. (Run :cleanup vehicles if a
+-- map loads slower than this.)
 task.spawn(function()
+  -- give a saved map time to finish loading
   task.wait(STARTUP.OFFSET)
-  local count, steady = -1, 0
-  for _ = 1, STARTUP.MAX_WAIT do
-    local now = 0
-    pcall(function() now = #mapRoot():GetChildren() end)
-    if now == count then steady = steady + 1 else steady = 0 end
-    count = now
-    if steady >= STARTUP.SETTLED then break end
-    task.wait(1)
-  end
-  for pass = 1, 2 do
-    if pass == 2 then task.wait(STARTUP.SECOND_PASS) end
-    if not copyActive() then return end
-    local ok, n = pcall(restoreSavedStrykers)
+  if not copyActive() then return end
+  local ok, n = pcall(restoreSavedStrykers)
+  if not ok then
+    print("[Stryker] restore failed: " .. tostring(n))
+  elseif n > 0 then
     local cleared = clearLeftovers()
-    if not ok then
-      print("[Stryker] restore pass failed: " .. tostring(n))
-    elseif n > 0 or cleared > 0 then
-      print("[Stryker] restored " .. n .. " saved Strykers, cleared " .. cleared .. " loose leftovers")
-    end
+    print("[Stryker] restored " .. n .. " saved Strykers, cleared " .. cleared .. " loose leftovers")
   end
 end)
 
@@ -2227,7 +2273,8 @@ local function debugReport(player)
   local lines = {
     "Stryker debug (" .. e.owner .. ", rev " .. COPY.REVISION .. "): alive " .. tostring(alive(e))
       .. ", build stage " .. tostring(e.stage) .. ", " .. #(e.parts or {}) .. " parts, " .. inModel .. " inside the model.",
-    "Loops: drive " .. (e.beatDrive and string.format("%.1fs ago", now - e.beatDrive) or "NEVER RAN")
+    "Build " .. string.format("%.1fs", e.buildTime or 0) .. ", slowest drive tick " .. string.format("%.0f ms", (e.slowTick or 0) * 1000)
+      .. ". Loops: drive " .. (e.beatDrive and string.format("%.1fs ago", now - e.beatDrive) or "NEVER RAN")
       .. ", gun/ramp " .. (e.beatStation and string.format("%.1fs ago", now - e.beatStation) or "NEVER RAN")
       .. ". Last error: " .. tostring(e.lastError or "none"),
     "Driving: speed " .. string.format("%.1f", e.speed or 0) .. ", on ground " .. tostring(drive.grounded)
@@ -2278,4 +2325,4 @@ event("chatted", function(data)
 end)
 
 -- Last line of the file. If this message is missing from the server log, the paste was cut off.
-print("[Stryker] rev 15 loaded: full file pasted, ready for :spawn stryker")
+print("[Stryker] rev 16 loaded: full file pasted, ready for :spawn stryker")
