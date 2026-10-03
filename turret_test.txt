@@ -34,7 +34,7 @@ local function ry(deg) return CFrame.Angles(0, math.rad(deg), 0) end
 local function rz(deg) return CFrame.Angles(0, 0, math.rad(deg)) end
 
 local T = {
-  model = false, seat = false, rws = false, owner = false,
+  model = false, seat = false, rws = false, owner = false, label = false, lastInput = "none",
   yaw = 0, pitch = 0, recoil = 0, nextBurst = 0,
   ticks = 0, slowestTick = 0, buildTime = 0, parts = 0,
   seen = {}, clicks = 0, shots = 0, lastClick = "none yet", mousedown = "not seen yet",
@@ -49,6 +49,7 @@ local retired = false
 local function tell(message, player)
   print("[Turret " .. COPY_ID .. "] " .. message)
   pcall(announce, "[copy " .. COPY_ID .. "] " .. message, player)
+  pcall(sideinfo, "[copy " .. COPY_ID .. "] " .. message, player)
 end
 
 local function nameOf(who)
@@ -79,7 +80,7 @@ local function clear()
   if T.model then pcall(function() T.model:Destroy() end) end
   for _, p in ipairs(built) do pcall(function() p:Destroy() end) end
   built = {}
-  T.model, T.seat, T.rws = false, false, false
+  T.model, T.seat, T.rws, T.label = false, false, false, false
 end
 
 ---------------------------------------------------------------------------------------------
@@ -381,6 +382,21 @@ local function build(player)
   for _, p in ipairs(k.pinned) do
     if p ~= chassis then p.Anchored = false end
   end
+  -- live status sign, facing back toward where you stood when you built it
+  local sign = k.block("StatusSign", 5.2, 2.6, 0.2, k.at(-2.6, 2.0, 1.0) * CFrame.Angles(0, math.pi, 0), COLOR.BLACK, MAT.SMOOTH, chassis)
+  pcall(function()
+    local gui = Instance.new("SurfaceGui")
+    gui.Face = Enum.NormalId.Front
+    gui.Parent = sign
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextScaled = true
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.Text = "copy " .. COPY_ID .. ": building..."
+    label.Parent = gui
+    T.label = label
+  end)
   T.rws = k.rws
   T.yaw, T.pitch, T.recoil = 0, 0, 0
   T.buildTime = tick() - started
@@ -408,6 +424,7 @@ task.spawn(function()
         if seat.Occupant then
           saw("SITTING IN THE SEAT")
           local steer, throttle = seat.Steer, seat.Throttle
+          T.lastInput = "W/S " .. tostring(throttle) .. ", A/D " .. tostring(steer)
           if throttle ~= 0 then saw("W/S IN THE SEAT") end
           if steer ~= 0 then saw("A/D IN THE SEAT") end
           if steer ~= 0 or throttle ~= 0 then
@@ -461,6 +478,32 @@ local function report(player)
   }
   for _, line in ipairs(lines) do tell(line, player) end
 end
+
+-- Refresh the status sign once a second (it stops changing if this copy stops).
+local function seatText()
+  local text = "empty"
+  pcall(function()
+    if T.seat.Occupant then
+      text = "occupied"
+      pcall(function() text = "occupied by " .. tostring(T.seat.Occupant.Parent.Name) end)
+    end
+  end)
+  return text
+end
+task.spawn(function()
+  while not retired do
+    task.wait(1)
+    if T.label then
+      pcall(function()
+        T.label.Text = "TURRET TEST  copy " .. COPY_ID .. "  running " .. tostring(math.floor(tick() - STARTED)) .. " s\n"
+          .. "aim loop ticks " .. T.ticks .. "   seat " .. seatText() .. "\n"
+          .. "input " .. T.lastInput .. "   clicks " .. T.clicks .. "   shots " .. T.shots .. "\n"
+          .. "last shot: " .. T.lastFire
+      end)
+    end
+  end
+  pcall(function() T.label.Text = "copy " .. COPY_ID .. " STOPPED (a newer copy took over)" end)
+end)
 
 -- One copy at a time. Each copy puts a marker named after its start time in the map; when a
 -- copy sees a newer marker it stops (its loop ends and it ignores commands).
