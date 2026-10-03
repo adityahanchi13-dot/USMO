@@ -1,4 +1,4 @@
--- Stryker vehicle for Server Addons, rev 14.
+-- Stryker vehicle for Server Addons, rev 15.
 -- Commands: :spawn stryker, :stryker driver|commander|board, :fire, :vehicles, :cleanup vehicles
 --
 -- Driver seat drives. Commander seat aims the .50 cal (A/D traverse, W/S elevate) and fires
@@ -27,7 +27,7 @@ local DRIVE = {
   WALL_HEIGHTS = { 4.0, 7.5 }, WALL_NORMAL_Y = 0.7, TILT_BLEND = 0.25, FALL_LIMIT = -400,
 }
 local COPY = {
-  PREFIX = "StrykerAddon#", REVISION = 14, name = false, root = false, retired = false,
+  PREFIX = "StrykerAddon#", REVISION = 15, name = false, root = false, retired = false,
   token = false, stamp = 0, world = false,
 }
 
@@ -195,11 +195,20 @@ local function removePart(p)
   pcall(function() p:Destroy() end)
 end
 
+local function dispose(inst)
+  if not inst then return end
+  pcall(function() inst:Destroy() end)
+  local stuck = false
+  pcall(function() stuck = inst.Parent ~= nil end)
+  if stuck then pcall(function() inst.Name = inst.Name .. "#junk" end) end
+end
+
 -- Every instance a Stryker owns lives inside its Model, so one Destroy() removes it all.
 -- The list is a second net in case anything escaped the model.
 local function destroyEntry(entry)
   entry.dead = true
   pcall(function() entry.car:Destroy() end)
+  for _, p in ipairs(entry.extras or {}) do dispose(p) end
   for _, p in ipairs(entry.parts or {}) do
     pcall(function() if p.Parent ~= nil then p:Destroy() end end)
     local still = false
@@ -223,14 +232,6 @@ local function destroyStryker(key)
   end
 end
 
-local function dispose(inst)
-  if not inst then return end
-  pcall(function() inst:Destroy() end)
-  local stuck = false
-  pcall(function() stuck = inst.Parent ~= nil end)
-  if stuck then pcall(function() inst.Name = inst.Name .. "#junk" end) end
-end
-
 -- Is this instance part of this vehicle? Checked three ways, because in this game f() can move
 -- parts out of the vehicle's Model to the map root: the remembered set, the Model, and the
 -- StrykerKey attribute stamped on every part.
@@ -239,7 +240,7 @@ local function isOwn(entry, inst)
   if entry.own and entry.own[inst] then return true end
   local mine = false
   pcall(function()
-    mine = inst:IsDescendantOf(entry.car) or inst:GetAttribute("StrykerKey") == entry.key
+    mine = inst:IsDescendantOf(entry.car) or inst:GetAttribute("StrykerBuild") == entry.build
   end)
   return mine
 end
@@ -311,8 +312,12 @@ local function worldRoot()
   return COPY.world
 end
 
+-- Our own target records are plain tables with isTarget = true. Reading a missing field on an
+-- Instance throws, so the check is protected.
 local function isTarget(x)
-  return type(x) == "table" and x.isTarget == true
+  if type(x) ~= "table" then return false end
+  local ok, mark = pcall(function() return x.isTarget end)
+  return ok and mark == true
 end
 
 -- Generous hit test against players only (raycasts already find NPC parts and player bodies).
@@ -513,6 +518,7 @@ local function fireBurst(entry, shooter)
   for round = 1, GUN.BURST do
     if round > 1 then task.wait(GUN.ROUND_GAP) end
     if not alive(entry) then return end
+    local ok, err = pcall(function()
     local muzzle = entry.cradle.CFrame * CFrame.new(0, 0, -GUN.MUZZLE * SCALE)
     local spread = CFrame.Angles((math.random() - 0.5) * 2 * GUN.SPREAD, (math.random() - 0.5) * 2 * GUN.SPREAD, 0)
     local dir = (muzzle * spread).LookVector
@@ -542,6 +548,11 @@ local function fireBurst(entry, shooter)
           smoke(entry.car, to, 1.5, 2, FX.DUST, 0.25)
         end
       end)
+    end
+    end)
+    if not ok then
+      entry.lastError = "gun: " .. tostring(err)
+      print("[Stryker] gun round error: " .. tostring(err))
     end
   end
   local lines = {}
@@ -703,7 +714,10 @@ local function newKit(car, root, entry)
     p.Massless = true
     place(p, car)
     entry.own[p] = true
-    pcall(function() p:SetAttribute("StrykerKey", entry.key) end)
+    pcall(function()
+      p:SetAttribute("StrykerKey", entry.key)
+      p:SetAttribute("StrykerBuild", entry.build)
+    end)
     if weldTo then weld(weldTo, p) end
     table.insert(k.parts, p)
     if #k.parts % 25 == 0 then task.wait(0.03) end
@@ -1183,6 +1197,11 @@ local function updateCrew(entry)
   local aboard = {}
   for _, seatInfo in ipairs(entry.allSeats) do
     local name = occupantName(seatInfo.seat, online)
+    if not name and seatInfo.name then
+      local still = false
+      pcall(function() still = seatInfo.seat.Occupant ~= nil end)
+      if still then name = seatInfo.name end
+    end
     if name ~= seatInfo.name then
       local previous = seatInfo.name
       seatInfo.name = name
@@ -1639,7 +1658,9 @@ local function buildStryker(owner, car, root, entry, dropOwnerIn)
   marker.CanQuery = false
   marker.CanTouch = false
   place(marker, car)
+  pcall(function() marker:SetAttribute("StrykerOwner", owner) end)
   entry.marker = marker
+  table.insert(entry.extras, marker)
 
   local k = newKit(car, root, entry)
   local chassis = k.block("Chassis", 3.0, 0.4, 4.0, k.at(0, DIM.CHASSIS_Y, DIM.CHASSIS_Z), COLOR.BLACK, MAT.SMOOTH, false)
@@ -1685,6 +1706,7 @@ local function buildStryker(owner, car, root, entry, dropOwnerIn)
     rear = k.anchor("RearDoor", 0, 4.0, DIM.TAIL + 1.6, chassis),
   }
   entry.aimDot = makeAimDot(car, root)
+  table.insert(entry.extras, entry.aimDot)
   entry.dotSize = 0
 
   for _, gunPart in ipairs(k.rws.trigger) do
@@ -1756,7 +1778,8 @@ local function createStryker(key, owner, root, dropOwnerIn)
   local car = Instance.new("Model")
   car.Name = owner .. "_Stryker"
   f(car) -- the Model goes into the map first; parts are then parented into it
-  local entry = { key = key, car = car, carName = car.Name, owner = owner, seats = {}, aboard = {}, parts = {}, own = {} }
+  local entry = { key = key, car = car, carName = car.Name, owner = owner, seats = {}, aboard = {}, parts = {}, own = {},
+    extras = {}, build = key .. "@" .. string.format("%d", math.floor(tick() * 1000) % 1000000000) .. "-" .. math.random(1, 99999) }
   Strykers[key] = entry
   local ok, err = pcall(buildStryker, owner, car, root, entry, dropOwnerIn)
   if not ok then
@@ -1944,7 +1967,9 @@ local function findSavedStrykers()
   local scanned = pcall(function()
     for _, inst in ipairs(mapRoot():GetChildren()) do
       if inst.Name == MARKER_NAME then
-        table.insert(jobs, { marker = inst, model = false, root = inst.CFrame })
+        local savedOwner = nil
+        pcall(function() savedOwner = inst:GetAttribute("StrykerOwner") end)
+        table.insert(jobs, { marker = inst, model = false, root = inst.CFrame, owner = savedOwner })
       elseif strykerOwner(inst) and inst:IsA("Model") then
         local marker = inst:FindFirstChild(MARKER_NAME)
         if marker then
@@ -1999,7 +2024,10 @@ local function clearLeftovers()
       for _, entry in pairs(Strykers) do
         if isOwn(entry, inst) then live = true end
       end
-      if not live and LEFTOVERS[inst.Name] and inst:IsA("BasePart") and inst.Massless == true then
+      local stamped = false
+      pcall(function() stamped = inst:GetAttribute("StrykerBuild") ~= nil end)
+      local legacy = LEFTOVERS[inst.Name] and inst:IsA("BasePart") and inst.Massless == true
+      if not live and (stamped or legacy) then
         dispose(inst)
         cleared = cleared + 1
         if cleared % 100 == 0 then task.wait(0.03) end
@@ -2092,10 +2120,10 @@ local function restoreSavedStrykers()
   local jobs = findSavedStrykers()
   local restored, orphans = 0, 0
   for _, job in ipairs(jobs) do
-    local owner = nil
+    local owner = job.owner
     local root = job.root
     if job.model then
-      owner = strykerOwner(job.model)
+      owner = strykerOwner(job.model) or owner
       local parked = parkedFromTyres(job.model)
       -- the marker is anchored, so it is the reliable record; tyres are the fallback
       if parked and not root then root = parked end
@@ -2250,4 +2278,4 @@ event("chatted", function(data)
 end)
 
 -- Last line of the file. If this message is missing from the server log, the paste was cut off.
-print("[Stryker] rev 14 loaded: full file pasted, ready for :spawn stryker")
+print("[Stryker] rev 15 loaded: full file pasted, ready for :spawn stryker")
