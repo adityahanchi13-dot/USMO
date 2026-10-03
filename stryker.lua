@@ -2147,3 +2147,6 @@ event("chatted", function(data)
     end
   end
 end)
+
+-- Last line of the file. If this message is missing from the server log, the paste was cut off.
+print("[Stryker] rev 13 loaded: full file pasted, ready for :spawn stryker")
