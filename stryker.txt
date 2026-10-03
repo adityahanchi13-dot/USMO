@@ -671,8 +671,25 @@ local function buildStryker(owner, root, entry)
     local lastWheels = 0
     local toldAnchor = false
     local spawnedAt = tick()
+    local wasManned = false
+    local stuckFor = 0
+    local toldWake = false
+    -- Roblox puts a vehicle that sits still "to sleep", and a sleeping vehicle can ignore the velocity
+    -- this loop sets: it looks locked after you get out and back in. A tiny nudge wakes it up.
+    local function wake(why)
+      pcall(function() chassis.CFrame = chassis.CFrame + Vector3.new(0, 0.05, 0) end)
+      pcall(function() chassis:ApplyImpulse(Vector3.new(0, chassis.AssemblyMass * 0.5, 0)) end)
+      if not toldWake then
+        toldWake = true
+        print("[Stryker] woke the hull (" .. why .. ")")
+      end
+    end
     while car.Parent do
       local driving = k.driverSeat.Occupant ~= nil
+      -- someone just got in (driver or commander): wake it before they try to move or aim
+      local manned = driving or k.commanderSeat.Occupant ~= nil
+      if manned and not wasManned then wake("someone got in") end
+      wasManned = manned
       if driving or speed ~= 0 then task.wait(0.03) else task.wait(0.25) end
       local now = tick()
       local dt = math.min(now - last, 0.3)
@@ -727,6 +744,22 @@ local function buildStryker(owner, root, entry)
         local speedRatio = math.clamp(math.abs(speed) / MAX_SPEED, 0.05, 1)
         chassis.AssemblyAngularVelocity = Vector3.new(0, -steer * TURN_RATE * speedRatio, 0)
       end)
+
+      -- still stuck while the driver is asking it to move: wake it again
+      if driving and math.abs(speed) > 5 then
+        local real = 0
+        pcall(function()
+          local v = chassis.AssemblyLinearVelocity
+          real = Vector3.new(v.X, 0, v.Z).Magnitude
+        end)
+        if real < 1 then stuckFor = stuckFor + dt else stuckFor = 0 end
+        if stuckFor > 0.3 then
+          stuckFor = 0
+          wake("not moving while the driver holds W/S")
+        end
+      else
+        stuckFor = 0
+      end
 
       -- (debug) every 5 s while someone drives: seconds since spawn, anchored?, wanted speed, real speed
       if driving and now - lastPrint >= 5 then
