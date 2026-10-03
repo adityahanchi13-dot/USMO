@@ -1,15 +1,40 @@
--- TURRET TEST: the Stryker's commander seat, gun, WASD aiming and click firing, on their own.
--- Built the same way as the input lab's test gun (the parts of the lab that worked).
--- Run it as its own persistent addon. Chat:
+-- STRYKER TURRET TEST: the Stryker's own detailed remote weapon station (.50 cal) and commander
+-- seat, on their own, with the Stryker's aiming and firing. Use it to see which piece works in
+-- this game. Run it as its own persistent addon (turn the Stryker addon off while testing). Chat:
 --   :turret         build the test turret in front of you
 --   :turret report  what worked so far (also printed to the server log)
 --   :turret clear   remove it
--- Then: sit in the seat, press W/S and A/D (the gun should move), click the gun (it should fire).
+-- Then: sit in the commander seat, press W/S and A/D (the gun should move), click the gun (it fires).
+-- It fires on ANY click (like the input lab) and separately reports what the Stryker's
+-- "is this the commander?" check would have said.
+
+local SCALE = 1.25
+local DIM = {
+  CHASSIS_Y = 1.9, CHASSIS_Z = 3.96, HULL_X = 4.3, ROOF_Y = 6.7, RWS_X = 1.5, RWS_Z = -1.0, GUN_Y = 9.5,
+  SEAT_Y = 3.0, COMMANDER_X = 0.6, COMMANDER_Z = -3.0,
+}
+local GUN = {
+  RANGE = 1000, TRAVERSE_SPEED = math.rad(60), ELEVATE_SPEED = math.rad(45), MIN_PITCH = math.rad(-20),
+  MAX_PITCH = math.rad(60), BURST = 5, ROUND_GAP = 0.09, COOLDOWN = 0.8, SPREAD = math.rad(0.3), MUZZLE = 4.95,
+  TRACER_SPEED = 900, RECOIL = 0.3, CLICK_RANGE = 80,
+}
+local function rgb(r, g, b) return Color3.new(r / 255, g / 255, b / 255) end
+local COLOR = {
+  TAN = rgb(196, 173, 128), TAN_DARK = rgb(158, 138, 100), BLACK = rgb(28, 28, 26), GUN = rgb(34, 34, 32),
+  OLIVE = rgb(86, 92, 58), SEAT = rgb(60, 62, 48), GLASS = rgb(30, 40, 38), STEEL = rgb(54, 54, 50),
+  FLASH = Color3.new(1, 0.86, 0.5), TRACER = Color3.new(1, 0.62, 0.2),
+}
+local MAT = {
+  SMOOTH = Enum.Material.SmoothPlastic, METAL = Enum.Material.Metal, RUBBER = Enum.Material.Rubber,
+  NEON = Enum.Material.Neon, FABRIC = Enum.Material.Fabric,
+}
+local function ry(deg) return CFrame.Angles(0, math.rad(deg), 0) end
+local function rz(deg) return CFrame.Angles(0, 0, math.rad(deg)) end
 
 local T = {
-  model = false, seat = false, gun = false, owner = false,
-  yaw = 0, pitch = 0, nextShot = 0,
-  ticks = 0, loopStarted = false, slowestTick = 0,
+  model = false, seat = false, rws = false, owner = false,
+  yaw = 0, pitch = 0, recoil = 0, nextBurst = 0,
+  ticks = 0, slowestTick = 0, buildTime = 0, parts = 0,
   seen = {}, clicks = 0, shots = 0, lastClick = "none yet", mousedown = "not seen yet",
 }
 
@@ -33,7 +58,7 @@ local function playerPos(name)
   return nil
 end
 
--- record the first time something works, and say so
+-- announce the first time each piece works
 local function saw(what)
   if not T.seen[what] then
     T.seen[what] = true
@@ -41,74 +66,214 @@ local function saw(what)
   end
 end
 
--- same as the lab's part(): set Parent, then f()
-local function part(name, size, cf, color, parent)
+local built = {} -- every part, in case f() moved some out of the model
+local function clear()
+  if T.model then pcall(function() T.model:Destroy() end) end
+  for _, p in ipairs(built) do pcall(function() p:Destroy() end) end
+  built = {}
+  T.model, T.seat, T.rws = false, false, false
+end
+
+---------------------------------------------------------------------------------------------
+-- Builder: the same kit the Stryker uses (parts welded to an anchored chassis part)
+---------------------------------------------------------------------------------------------
+
+local function newKit(model, root)
+  local k = { pinned = {} }
+  function k.at(x, y, z) return root * CFrame.new(x * SCALE, y * SCALE, z * SCALE) end
+  function k.off(x, y, z) return CFrame.new(x * SCALE, y * SCALE, z * SCALE) end
+  function k.facing(x, y, z, dx, dy, dz)
+    local p = Vector3.new(x, y, z) * SCALE
+    return root * CFrame.new(p, p + Vector3.new(dx, dy, dz))
+  end
+  function k.make(className, name, size, cf, color, material, weldTo, shape)
+    local p = Instance.new(className)
+    p.Name = name
+    if shape then p.Shape = shape end
+    p.Size = size * SCALE
+    p.CFrame = cf
+    p.Color = color
+    p.Material = material
+    p.Anchored = not weldTo
+    p.CanCollide = false
+    p.CanQuery = false
+    p.Parent = model
+    pcall(f, p)
+    if weldTo then
+      local w = Instance.new("WeldConstraint")
+      w.Part0 = weldTo
+      w.Part1 = p
+      w.Parent = weldTo
+    else
+      table.insert(k.pinned, p)
+    end
+    T.parts = T.parts + 1
+    table.insert(built, p)
+    return p
+  end
+  function k.block(name, sx, sy, sz, cf, color, material, weldTo)
+    return k.make("Part", name, Vector3.new(sx, sy, sz), cf, color, material, weldTo, false)
+  end
+  function k.cylinder(name, length, diameter, cf, color, material, weldTo)
+    return k.make("Part", name, Vector3.new(length, diameter, diameter), cf, color, material, weldTo, Enum.PartType.Cylinder)
+  end
+  function k.bolt(cf, weldTo)
+    return k.cylinder("Bolt", 0.06, 0.16, cf, COLOR.TAN_DARK, MAT.METAL, weldTo)
+  end
+  function k.joint(name, part0, part1, offset, c1)
+    local j = Instance.new("Weld")
+    j.Name = name
+    j.Part0 = part0
+    j.Part1 = part1
+    j.C0 = offset
+    j.C1 = c1
+    j.Parent = part0
+    return j
+  end
+  return k
+end
+
+-- The Stryker's remote weapon station, unchanged.
+local function buildRws(k)
+  local c = k.chassis
+  local x, z, roof, gy = DIM.RWS_X, DIM.RWS_Z, DIM.ROOF_Y, DIM.GUN_Y
+  local block, cylinder, at = k.block, k.cylinder, k.at
+  cylinder("RwsBase", 0.4, 2.2, at(x, roof + 0.2, z) * rz(90), COLOR.TAN_DARK, MAT.METAL, c)
+  for b = 0, 7 do
+    local a = b * math.pi / 4
+    k.bolt(at(x + 0.95 * math.cos(a), roof + 0.42, z + 0.95 * math.sin(a)) * rz(90), c)
+  end
+  local mount = block("RwsMount", 0.3, 0.3, 0.3, at(x, roof + 0.4, z), COLOR.BLACK, MAT.SMOOTH, false)
+  mount.Transparency = 1
+  local yaw = k.joint("RwsYawWeld", c, mount, k.off(x, roof + 0.4 - DIM.CHASSIS_Y, z - DIM.CHASSIS_Z), CFrame.new())
+  local columnH = gy - roof - 1.0
+  local pedestal = block("RwsPedestal", 1.1, columnH, 1.1, at(x, roof + 0.4 + columnH / 2, z + 0.1), COLOR.TAN, MAT.SMOOTH, mount)
+  block("RwsCable", 0.2, columnH, 0.2, at(x - 0.4, roof + 0.4 + columnH / 2, z + 0.7), COLOR.BLACK, MAT.RUBBER, mount)
+  block("RwsJunctionBox", 0.6, 0.5, 0.4, at(x + 0.55, roof + 0.9, z + 0.5), COLOR.TAN_DARK, MAT.SMOOTH, mount)
+  for _, s in ipairs({ -1, 1 }) do
+    block("RwsYoke", 0.2, 1.3, 1.0, at(x + s * 0.75, gy - 0.3, z + 0.1), COLOR.TAN_DARK, MAT.METAL, mount)
+    for i = 0, 3 do
+      cylinder("RwsSmokeTube", 0.45, 0.2, k.facing(x + s * 0.8, roof + 0.85 + i * 0.24, z - 0.35, s * 0.5, 0.4, -0.75) * ry(90),
+        COLOR.TAN_DARK, MAT.METAL, mount)
+    end
+  end
+  local trigger = {}
+  table.insert(trigger, block("RwsAmmoCan", 0.6, 0.8, 1.1, at(x - 1.15, gy - 0.35, z + 0.1), COLOR.OLIVE, MAT.METAL, mount))
+  block("RwsAmmoLid", 0.62, 0.08, 1.12, at(x - 1.15, gy + 0.07, z + 0.1), COLOR.OLIVE, MAT.METAL, mount)
+  block("RwsFeedChute", 0.35, 0.2, 0.6, at(x - 0.6, gy - 0.05, z + 0.1), COLOR.BLACK, MAT.METAL, mount)
+  local cradle = block("RwsCradle", 0.3, 0.3, 0.3, at(x, gy, z), COLOR.BLACK, MAT.SMOOTH, false)
+  cradle.Transparency = 1
+  local pitch = k.joint("RwsPitchWeld", mount, cradle, k.off(0, gy - roof - 0.4, 0), CFrame.new())
+  table.insert(trigger, pedestal)
+  table.insert(trigger, block("RwsReceiver", 0.45, 0.55, 1.8, at(x, gy, z + 0.2), COLOR.GUN, MAT.METAL, cradle))
+  block("RwsFeedCover", 0.47, 0.08, 1.1, at(x, gy + 0.31, z + 0.05), COLOR.GUN, MAT.METAL, cradle)
+  block("RwsChargingHandle", 0.3, 0.08, 0.08, at(x + 0.3, gy + 0.1, z + 0.6), COLOR.BLACK, MAT.METAL, cradle)
+  table.insert(trigger, cylinder("RwsJacket", 0.8, 0.3, at(x, gy, z - 1.1) * ry(90), COLOR.GUN, MAT.METAL, cradle))
+  for i = 0, 2 do
+    cylinder("RwsJacketHole", 0.02, 0.1, at(x + 0.15, gy, z - 0.85 - i * 0.22), COLOR.BLACK, MAT.SMOOTH, cradle)
+  end
+  table.insert(trigger, cylinder("RwsBarrel", 3.2, 0.16, at(x, gy, z - 3.1) * ry(90), COLOR.GUN, MAT.METAL, cradle))
+  block("RwsCarryHandle", 0.08, 0.08, 0.5, at(x, gy + 0.35, z - 1.55), COLOR.GUN, MAT.METAL, cradle)
+  for _, dz in ipairs({ -0.22, 0.22 }) do
+    block("RwsCarryHandlePost", 0.08, 0.25, 0.08, at(x, gy + 0.2, z - 1.55 + dz), COLOR.GUN, MAT.METAL, cradle)
+  end
+  block("RwsFrontSight", 0.06, 0.2, 0.06, at(x, gy + 0.15, z - 4.5), COLOR.GUN, MAT.METAL, cradle)
+  table.insert(trigger, cylinder("RwsFlashHider", 0.3, 0.24, at(x, gy, z - 4.8) * ry(90), COLOR.GUN, MAT.METAL, cradle))
+  table.insert(trigger, block("RwsSight", 0.8, 0.8, 1.2, at(x + 1.3, gy + 0.1, z - 0.1), COLOR.TAN, MAT.SMOOTH, cradle))
+  block("RwsSightArm", 0.6, 0.25, 0.4, at(x + 0.75, gy, z - 0.1), COLOR.TAN_DARK, MAT.METAL, cradle)
+  block("RwsSunshade", 0.9, 0.06, 0.45, at(x + 1.3, gy + 0.53, z - 0.8), COLOR.TAN_DARK, MAT.METAL, cradle)
+  cylinder("RwsDayCamera", 0.05, 0.34, at(x + 1.12, gy + 0.25, z - 0.72) * ry(90), COLOR.GLASS, MAT.SMOOTH, cradle)
+  block("RwsThermal", 0.3, 0.28, 0.05, at(x + 1.48, gy + 0.25, z - 0.72), COLOR.BLACK, MAT.SMOOTH, cradle)
+  cylinder("RwsLaser", 0.05, 0.16, at(x + 1.3, gy - 0.12, z - 0.72) * ry(90), COLOR.GLASS, MAT.SMOOTH, cradle)
+  for _, p in ipairs(trigger) do p.CanQuery = true end
+  k.rws = { yaw = yaw, yawBase = yaw.C0, pitch = pitch, pitchBase = pitch.C0, cradle = cradle, trigger = trigger }
+end
+
+---------------------------------------------------------------------------------------------
+-- Firing: the Stryker's 5-round burst (muzzle flash, tracer flying on a tween)
+---------------------------------------------------------------------------------------------
+
+local function linear(t) return TweenInfo.new(t, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, 0, false, 0) end
+
+local function fxPart(name, ball, size, cf, color)
   local p = Instance.new("Part")
   p.Name = name
+  if ball then p.Shape = Enum.PartType.Ball end
   p.Size = size
   p.CFrame = cf
   p.Color = color
-  p.Material = Enum.Material.SmoothPlastic
+  p.Material = MAT.NEON
   p.Anchored = true
   p.CanCollide = false
-  p.Parent = parent
-  f(p)
+  p.CanQuery = false
+  p.Parent = T.model
+  pcall(f, p)
   return p
 end
 
-local function clear()
-  if T.model then pcall(function() T.model:Destroy() end) end
-  T.model, T.seat, T.gun = false, false, false
+local function removeLater(p, t)
+  task.spawn(function()
+    task.wait(t)
+    pcall(function() p:Destroy() end)
+  end)
 end
 
--- ===== FIRING (the lab's fireShell: one raycast decides, a shell flies there on a tween) =====
-local function fire(shooter)
-  if not T.gun or tick() < T.nextShot then return end
-  T.nextShot = tick() + 0.4
-  T.shots = T.shots + 1
-  local muzzle = T.gun.cradle.CFrame * CFrame.new(0, 0, -4.5)
-  local dir = muzzle.LookVector
-  local from = muzzle.Position
+local function fireBurst(shooter)
   local params = nil
   pcall(function()
     params = RaycastParams.new()
     params.FilterDescendantsInstances = { T.model }
     params.FilterType = Enum.RaycastFilterType.Exclude
   end)
-  local hitPos = from + dir * 300
-  local ok, hit = pcall(raycast, from, dir * 300, params)
-  if ok and hit then hitPos = hit.Position end
-  local shell = part("TestShell", Vector3.new(0.3, 0.3, 1.5), CFrame.new(from, from + dir),
-    Color3.new(1, 0.7, 0.3), T.model)
-  pcall(function() shell.Material = Enum.Material.Neon end)
-  local flight = math.max(0.05, (hitPos - from).Magnitude / 300)
-  pcall(tween, shell, TweenInfo.new(flight, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, 0, false, 0),
-    { CFrame = CFrame.new(hitPos, hitPos + dir) })
-  task.spawn(function()
-    task.wait(flight)
-    pcall(function() shell:Destroy() end)
-    pcall(function()
-      local boom = Instance.new("Explosion")
-      boom.Position = hitPos
-      boom.BlastRadius = 2
-      boom.BlastPressure = 0
-      boom.DestroyJointRadiusPercent = 0
-      f(boom)
+  for round = 1, GUN.BURST do
+    if round > 1 then task.wait(GUN.ROUND_GAP) end
+    if not T.rws then return end
+    local ok, err = pcall(function()
+      local muzzle = T.rws.cradle.CFrame * CFrame.new(0, 0, -GUN.MUZZLE * SCALE)
+      local spread = CFrame.Angles((math.random() - 0.5) * 2 * GUN.SPREAD, (math.random() - 0.5) * 2 * GUN.SPREAD, 0)
+      local dir = (muzzle * spread).LookVector
+      local from = muzzle.Position
+      local flash = fxPart("MuzzleFlash", true, Vector3.new(0.9, 0.9, 0.9), CFrame.new(from + dir * 0.5), COLOR.FLASH)
+      pcall(function()
+        local light = Instance.new("PointLight")
+        light.Color = COLOR.FLASH
+        light.Brightness = 3
+        light.Range = 12
+        light.Parent = flash
+      end)
+      pcall(tween, flash, linear(0.08), { Transparency = 1, Size = flash.Size * 2 })
+      removeLater(flash, 0.13)
+      T.recoil = GUN.RECOIL
+      local to = from + dir * GUN.RANGE
+      local hitOk, hit = pcall(raycast, from, dir * GUN.RANGE, params)
+      if hitOk and hit then to = hit.Position end
+      local dist = (to - from).Magnitude
+      if dist > 0.5 then
+        local flight = math.max(0.03, dist / GUN.TRACER_SPEED)
+        local tracer = fxPart("Tracer", false, Vector3.new(0.18, 0.18, 2.5), CFrame.new(from, from + dir), COLOR.TRACER)
+        pcall(tween, tracer, linear(flight), { CFrame = CFrame.new(to, to + dir) })
+        removeLater(tracer, flight)
+      end
+      T.shots = T.shots + 1
+      if round == 1 then
+        print("[Turret] burst by " .. tostring(shooter) .. ", first round hit "
+          .. (hitOk and hit and tostring(hit.Instance) or "nothing"))
+      end
     end)
-  end)
+    if not ok then print("[Turret] round error: " .. tostring(err)) end
+  end
   saw("FIRING")
-  print("[Turret] shot " .. T.shots .. " by " .. tostring(shooter) .. ", hit " .. (ok and hit and tostring(hit.Instance) or "nothing"))
 end
 
--- the Stryker's seat checks, reported but NOT required (the lab fired on any click)
+-- the Stryker's "is this the commander?" checks, reported but NOT required here
 local function seatCheck(name)
-  local seat = T.seat
   local occupied, occName, dist = false, "unreadable", -1
-  pcall(function() occupied = seat.Occupant ~= nil end)
-  pcall(function() occName = seat.Occupant.Parent.Name end)
-  pcall(function() dist = (playerPos(name) - seat.Position).Magnitude end)
-  return string.format("seat occupied %s, occupant name %s, clicker %.1f studs from seat",
-    tostring(occupied), tostring(occName), dist)
+  pcall(function() occupied = T.seat.Occupant ~= nil end)
+  pcall(function() occName = T.seat.Occupant.Parent.Name end)
+  pcall(function() dist = (playerPos(name) - T.seat.Position).Magnitude end)
+  local wouldFire = occupied and (occName == name or (dist >= 0 and dist <= 10))
+  return string.format("seat occupied %s, occupant name %s, clicker %.1f studs from seat -> Stryker would %s",
+    tostring(occupied), tostring(occName), dist, wouldFire and "FIRE" or "REFUSE")
 end
 
 local function onClick(who, button)
@@ -117,12 +282,18 @@ local function onClick(who, button)
   T.lastClick = tostring(name) .. " (" .. button .. "): " .. seatCheck(name)
   print("[Turret] click " .. T.clicks .. ": " .. T.lastClick)
   saw("CLICKING THE GUN")
-  fire(name)
+  if tick() < T.nextBurst then return end
+  T.nextBurst = tick() + GUN.BURST * GUN.ROUND_GAP + GUN.COOLDOWN
+  task.spawn(fireBurst, name)
 end
 
--- ===== BUILD (the lab's buildRange gun, plus a seat) =====
+---------------------------------------------------------------------------------------------
+-- Build: roof section with the turret, commander seat underneath (Stryker positions)
+---------------------------------------------------------------------------------------------
+
 local function build(player)
   clear()
+  local started = tick()
   local cf = nil
   pcall(function() cf = getPlayerPosition(player) end)
   if typeof(cf) ~= "CFrame" then
@@ -130,106 +301,107 @@ local function build(player)
     return
   end
   T.owner = player
+  T.parts = 0
   local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z).Unit
-  local feet = cf.Position - Vector3.new(0, 3, 0) + look * 8
+  local feet = cf.Position - Vector3.new(0, 3, 0) + look * 12
   local root = CFrame.new(feet, feet + look)
-  local at = function(x, y, z) return root * CFrame.new(x, y, z) end
 
   local model = Instance.new("Model")
-  model.Name = "TurretTest"
+  model.Name = "StrykerTurretTest"
   f(model)
   T.model = model
-
-  local floor = part("TestFloor", Vector3.new(10, 0.4, 10), at(0, 0.2, 0), Color3.new(0.5, 0.5, 0.52), model)
+  local k = newKit(model, root)
+  local chassis = k.block("Chassis", 3.0, 0.4, 4.0, k.at(0, DIM.CHASSIS_Y, DIM.CHASSIS_Z), COLOR.BLACK, MAT.SMOOTH, false)
+  chassis.Transparency = 1
+  k.chassis = chassis
+  -- floor, a roof section with the commander hatch, and two posts holding it up
+  local floor = k.block("TestFloor", 8.6, 0.3, 8, k.at(0, 0.15, -2.5), COLOR.TAN_DARK, MAT.SMOOTH, chassis)
   floor.CanCollide = true
+  local roof = k.block("TestRoof", 8.6, 0.3, 6.5, k.at(0, DIM.ROOF_Y - 0.15, -2.5), COLOR.TAN, MAT.SMOOTH, chassis)
+  roof.CanCollide = true
+  for _, s in ipairs({ -1, 1 }) do
+    k.block("TestPost", 0.4, DIM.ROOF_Y - 0.3, 0.4, k.at(s * 4.0, DIM.ROOF_Y / 2, 0.4), COLOR.TAN, MAT.SMOOTH, chassis)
+  end
+  k.cylinder("CommanderRing", 0.2, 2.0, k.at(-1.0, DIM.ROOF_Y + 0.1, -3.2) * rz(90), COLOR.TAN_DARK, MAT.METAL, chassis)
+  buildRws(k)
 
-  local seat = Instance.new("VehicleSeat")
-  seat.Name = "TestCommanderSeat"
-  seat.Size = Vector3.new(2, 0.6, 2)
-  seat.CFrame = at(0, 0.7, 2)
-  seat.Color = Color3.new(0.2, 0.2, 0.22)
-  seat.Anchored = true
+  local seat = k.make("VehicleSeat", "CommanderSeat", Vector3.new(1.5, 0.4, 1.4),
+    k.at(DIM.COMMANDER_X, DIM.SEAT_Y, DIM.COMMANDER_Z), COLOR.SEAT, MAT.FABRIC, chassis, false)
   seat.CanCollide = true
+  seat.CanQuery = true
   seat.MaxSpeed = 0
   seat.Torque = 0
   seat.TurnSpeed = 0
   seat.HeadsUpDisplay = false
-  seat.Parent = model
-  f(seat)
   T.seat = seat
 
-  -- gun: anchored base, yaw part and pitch part on Welds, barrel on a WeldConstraint
-  local base = part("GunBase", Vector3.new(2, 1, 2), at(0, 0.9, -2), Color3.new(0.2, 0.21, 0.2), model)
-  local yawPart = part("GunTurret", Vector3.new(1.8, 0.8, 2), base.CFrame * CFrame.new(0, 0.9, 0), Color3.new(0.77, 0.68, 0.5), model)
-  local cradle = part("GunCradle", Vector3.new(0.7, 0.7, 0.7), yawPart.CFrame * CFrame.new(0, 0.75, -0.4), Color3.new(0.2, 0.21, 0.2), model)
-  local barrel = part("GunBarrel", Vector3.new(4, 0.35, 0.35), cradle.CFrame * CFrame.new(0, 0, -2.2) * CFrame.Angles(0, math.pi / 2, 0), Color3.new(0.2, 0.21, 0.2), model)
-  barrel.Shape = Enum.PartType.Cylinder
-  yawPart.Anchored = false
-  cradle.Anchored = false
-  barrel.Anchored = false
-  local yawWeld = Instance.new("Weld")
-  yawWeld.Part0 = base
-  yawWeld.Part1 = yawPart
-  yawWeld.C0 = CFrame.new(0, 0.9, 0)
-  yawWeld.C1 = CFrame.new()
-  yawWeld.Parent = base
-  local pitchWeld = Instance.new("Weld")
-  pitchWeld.Part0 = yawPart
-  pitchWeld.Part1 = cradle
-  pitchWeld.C0 = CFrame.new(0, 0.75, -0.4)
-  pitchWeld.C1 = CFrame.new()
-  pitchWeld.Parent = yawPart
-  local hold = Instance.new("WeldConstraint")
-  hold.Part0 = cradle
-  hold.Part1 = barrel
-  hold.Parent = cradle
-  T.gun = { yaw = yawWeld, yawBase = yawWeld.C0, pitch = pitchWeld, pitchBase = pitchWeld.C0, cradle = cradle }
-  T.yaw, T.pitch = 0, 0
-
-  for _, gunPart in ipairs({ base, yawPart, cradle, barrel }) do
+  for _, gunPart in ipairs(k.rws.trigger) do
     local ok, err = pcall(function()
       local detector = Instance.new("ClickDetector")
-      detector.MaxActivationDistance = 60
+      detector.MaxActivationDistance = GUN.CLICK_RANGE
       detector.Parent = gunPart
       detector.MouseClick:Connect(function(who) onClick(who, "left") end)
       detector.RightMouseClick:Connect(function(who) onClick(who, "right") end)
     end)
     if not ok then tell("Turret test: ClickDetector could not be made: " .. tostring(err), player) end
   end
-  tell("Turret test built. Sit in the seat, press W/S and A/D, then click the gun. :turret report shows results.", player)
+  for _, p in ipairs(k.pinned) do
+    if p ~= chassis then p.Anchored = false end
+  end
+  T.rws = k.rws
+  T.yaw, T.pitch, T.recoil = 0, 0, 0
+  T.buildTime = tick() - started
+  tell(string.format("Turret test built (%d parts in %.1f s). Sit in the seat under the roof, press W/S and A/D, then click the gun. :turret report shows results.",
+    T.parts, T.buildTime), player)
 end
 
--- ===== AIM LOOP (exactly the lab's seat watcher) =====
+---------------------------------------------------------------------------------------------
+-- Aim loop: the Stryker's turret code (A/D traverse, W/S elevate, recoil)
+---------------------------------------------------------------------------------------------
+
 task.spawn(function()
-  T.loopStarted = true
+  local last = tick()
   while true do
-    task.wait(0.05)
-    local started = tick()
+    task.wait(0.03)
+    local now = tick()
+    local dt = math.min(now - last, 0.3)
+    last = now
     T.ticks = T.ticks + 1
-    local seat, gun = T.seat, T.gun
-    if seat and gun then
+    local seat, rws = T.seat, T.rws
+    if seat and rws then
       local ok, err = pcall(function()
+        local moved = false
         if seat.Occupant then
           saw("SITTING IN THE SEAT")
-          local throttle, steer = seat.Throttle, seat.Steer
+          local steer, throttle = seat.Steer, seat.Throttle
           if throttle ~= 0 then saw("W/S IN THE SEAT") end
           if steer ~= 0 then saw("A/D IN THE SEAT") end
-          if throttle ~= 0 or steer ~= 0 then
-            T.yaw = T.yaw - steer * math.rad(60) * 0.05
-            T.pitch = math.max(math.rad(-10), math.min(math.rad(45), T.pitch + throttle * math.rad(30) * 0.05))
-            gun.yaw.C0 = gun.yawBase * CFrame.Angles(0, T.yaw, 0)
-            gun.pitch.C0 = gun.pitchBase * CFrame.Angles(T.pitch, 0, 0)
-            saw("TURRET MOVING")
+          if steer ~= 0 or throttle ~= 0 then
+            T.yaw = (T.yaw - steer * GUN.TRAVERSE_SPEED * dt + math.pi) % (2 * math.pi) - math.pi
+            T.pitch = math.max(GUN.MIN_PITCH, math.min(GUN.MAX_PITCH, T.pitch + throttle * GUN.ELEVATE_SPEED * dt))
+            moved = true
           end
+        end
+        if T.recoil > 0 then
+          T.recoil = math.max(0, T.recoil - dt * 4)
+          moved = true
+        end
+        if moved then
+          rws.yaw.C0 = rws.yawBase * CFrame.Angles(0, T.yaw, 0)
+          rws.pitch.C0 = rws.pitchBase * CFrame.Angles(T.pitch, 0, 0) * CFrame.new(0, 0, T.recoil * SCALE)
+          if seat.Occupant then saw("TURRET MOVING") end
         end
       end)
       if not ok then print("[Turret] aim loop error: " .. tostring(err)) end
     end
-    T.slowestTick = math.max(T.slowestTick, tick() - started)
+    T.slowestTick = math.max(T.slowestTick, tick() - now)
   end
 end)
 
--- ===== REPORT =====
+---------------------------------------------------------------------------------------------
+-- Report and events
+---------------------------------------------------------------------------------------------
+
 local function report(player)
   local worked = {}
   for _, what in ipairs({ "SITTING IN THE SEAT", "W/S IN THE SEAT", "A/D IN THE SEAT", "TURRET MOVING",
@@ -238,15 +410,15 @@ local function report(player)
   end
   local lines = {
     "Turret report: " .. table.concat(worked, ", "),
-    "Aim loop ran " .. T.ticks .. " ticks (about 20 a second is healthy), slowest tick "
-      .. string.format("%.0f ms", T.slowestTick * 1000) .. ". Clicks " .. T.clicks .. ", shots " .. T.shots .. ".",
+    string.format("Built %d parts in %.1f s. Aim loop ran %d ticks (about 30 a second is healthy), slowest tick %.0f ms. Clicks %d, rounds fired %d.",
+      T.parts, T.buildTime, T.ticks, T.slowestTick * 1000, T.clicks, T.shots),
     "Last click: " .. T.lastClick,
     "mousedown event: " .. T.mousedown,
   }
   for _, line in ipairs(lines) do tell(line, player) end
 end
 
--- mousedown: does the game send a click position? (needed for click-to-aim on the Stryker)
+-- does the game send a click position with mousedown? (the Stryker's click-to-aim needs it)
 event("mousedown", function(data)
   pcall(function()
     local who, tool, pos = data.Value[1], data.Value[2], data.Value[3]
@@ -270,4 +442,4 @@ event("chatted", function(data)
   end
 end)
 
-print("[Turret] turret test loaded. Type :turret to build it.")
+print("[Turret] Stryker turret test loaded. Type :turret to build it.")
