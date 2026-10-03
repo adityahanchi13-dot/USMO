@@ -1,0 +1,127 @@
+-- Stryker rev 13, PART 2 of 6. Paste each part as its own Server Addon and run them in order 1 to 6.
+local S = nil for _ = 1, 240 do local ok, r = pcall(signalAsync, "StrykerShared13")
+if ok and type(r) == "table" and r.ready and r.ready[1] then S = r break end task.wait(0.5) end
+if not S then print("[Stryker] part 2: part 1 is not running. Run parts 1 to 6 in order.") return end
+local COLOR, DETAIL, DIM, FX, GUN, MAT, SCALE, SHAPE = S.COLOR, S.DETAIL, S.DIM, S.FX, S.GUN, S.MAT, S.SCALE, S.SHAPE
+local aimPoint, alive, fade, fxPart, glow, impact, inSeat, nameOf = S.aimPoint, S.alive, S.fade, S.fxPart, S.glow, S.impact, S.inSeat, S.nameOf
+local place, rx, rz, smoke, strike, tell, tracer, victimOf = S.place, S.rx, S.rz, S.smoke, S.strike, S.tell, S.tracer, S.victimOf
+local weld, worldRoot = S.weld, S.worldRoot
+local function fireBurst(entry, shooter) local hits, killed, order = {}, {}, {} for round = 1, GUN.BURST do
+if round > 1 then task.wait(GUN.ROUND_GAP) end if not alive(entry) then return end
+local muzzle = entry.cradle.CFrame * CFrame.new(0, 0, -GUN.MUZZLE * SCALE)
+local spread = CFrame.Angles((math.random() - 0.5) * 2 * GUN.SPREAD, (math.random() - 0.5) * 2 * GUN.SPREAD, 0)
+local dir = (muzzle * spread).LookVector local from = muzzle.Position
+local flash = fxPart(entry.car, "MuzzleFlash", true, Vector3.new(0.9, 0.9, 0.9), CFrame.new(from + dir * 0.5), FX.FLASH, 0)
+glow(flash, FX.FLASH, 3, 12) fade(flash, 0.08, 2) entry.recoil = GUN.RECOIL
+local to, hit = aimPoint(entry, from, dir, GUN.RANGE, true) local victim = victimOf(hit)
+local dead = strike(victim, GUN.DAMAGE, entry.aboard or {}) if dead ~= nil then
+if not hits[victim.name] then table.insert(order, victim.name) end hits[victim.name] = (hits[victim.name] or 0) + 1
+if dead then killed[victim.name] = true end end local flight = tracer(entry.car, from, to, GUN.TRACER_SPEED) if hit then
+task.spawn(function() task.wait(flight) if not alive(entry) then return end if dead ~= nil then
+impact(entry.car, to, FX.FIRE, 0.6) else impact(entry.car, to, FX.SPARK, 0.4) smoke(entry.car, to, 1.5, 2, FX.DUST, 0.25) end end)
+end end local lines = {} for _, name in ipairs(order) do local text = name .. " hit " .. hits[name] .. "x"
+if killed[name] then text = text .. ", killed" end table.insert(lines, text) end
+if #lines > 0 and shooter then tell(".50 cal: " .. table.concat(lines, "; "), shooter) end end
+local function shoot(entry, shooter) if tick() < entry.nextBurst then return end
+entry.nextBurst = tick() + GUN.BURST * GUN.ROUND_GAP + GUN.COOLDOWN task.spawn(fireBurst, entry, shooter) end
+local function gunnerFire(entry, who) local name = nameOf(who)
+if not name or not alive(entry) or not entry.allSeats then return end local gunSeat = entry.allSeats[2].seat
+if inSeat(gunSeat, name) then entry.commander = entry.commander or name shoot(entry, name) return end
+entry.nagged = entry.nagged or {} if tick() - (entry.nagged[name] or 0) > GUN.NAG_EVERY then entry.nagged[name] = tick()
+tell("Sit in the Stryker's commander seat to fire the .50.", name) end end local function seatPlayer(seat, who, name)
+local sat = false pcall(function() local character = nil if type(who) ~= "string" then character = who.Character end
+if not character then character = worldRoot():FindFirstChild(name) end seat:Sit(character:FindFirstChildOfClass("Humanoid"))
+sat = true end) if not sat and name then pcall(setPlayerPosition, name, seat.CFrame * CFrame.new(0, 2.5, 0)) end end
+local function setEnabled(prompt, on) if prompt and prompt.Enabled ~= on then prompt.Enabled = on end end
+local function setPromptField(prompt, field, text) if prompt and prompt[field] ~= text then prompt[field] = text end end
+local function newPrompt(parent, name, key, action, objectText, range, hold) local prompt = Instance.new("ProximityPrompt")
+prompt.Name = name prompt.ActionText = action prompt.ObjectText = objectText prompt.KeyboardKeyCode = key
+prompt.HoldDuration = hold prompt.MaxActivationDistance = range prompt.RequiresLineOfSight = false prompt.Parent = parent
+return prompt end local function makeAimDot(car, at) local dot = Instance.new("Part") dot.Name = "AimDot"
+dot.Shape = Enum.PartType.Ball dot.Size = Vector3.new(0.8, 0.8, 0.8) dot.Color = COLOR.AIM_DOT dot.Material = MAT.NEON
+dot.Transparency = 1 dot.CFrame = at dot.Anchored = true dot.CanCollide = false dot.CanQuery = false dot.CanTouch = false
+return place(dot, car) end local function showAimDot(entry, from, dir, range)
+local pos, hit = aimPoint(entry, from, dir, range, false) local size = math.max(0.6, (pos - from).Magnitude * 0.012)
+pcall(function() if not entry.dotAt or (pos - entry.dotAt).Magnitude > 0.05 then entry.aimDot.CFrame = CFrame.new(pos)
+entry.dotAt = pos end if math.abs(size - entry.dotSize) > 0.1 * size then entry.aimDot.Size = Vector3.new(size, size, size)
+entry.dotSize = size end if entry.aimDot.Transparency ~= 0 then entry.aimDot.Transparency = 0 end end) return hit end
+local function hideAimDot(entry) pcall(function() if entry.aimDot.Transparency ~= 1 then entry.aimDot.Transparency = 1 end end)
+end local function keepRunning(entry, name, fn) task.spawn(function() local lastTold, failures = 0, 0 while alive(entry) do
+local ok, err = pcall(fn) if ok then return end failures = failures + 1
+print("[Stryker] " .. name .. " loop error: " .. tostring(err)) if tick() - lastTold > 10 then lastTold = tick()
+tell("Stryker " .. name .. " hit an error and restarted: " .. tostring(err), entry.owner) end task.wait(math.min(10, failures))
+end end) end local function newKit(car, root, entry) local k = { parts = {}, wheels = {}, troopSeats = {} } entry.parts = k.parts
+function k.at(x, y, z) return root * CFrame.new(x * SCALE, y * SCALE, z * SCALE) end
+function k.off(x, y, z) return CFrame.new(x * SCALE, y * SCALE, z * SCALE) end function k.facing(x, y, z, dx, dy, dz)
+local p = Vector3.new(x, y, z) * SCALE return root * CFrame.new(p, p + Vector3.new(dx, dy, dz)) end
+function k.make(className, name, size, cf, color, material, weldTo, shape)
+if entry.dead or not car.Parent then error("removed while it was being built", 0) end local p = Instance.new(className)
+p.Name = name if shape then p.Shape = shape end p.Size = size * SCALE p.CFrame = cf p.Color = color p.Material = material
+p.Anchored = true p.CanCollide = false p.CanTouch = false p.CanQuery = false p.Massless = true place(p, car)
+if weldTo then weld(weldTo, p) end table.insert(k.parts, p) if #k.parts % 25 == 0 then task.wait() end return p end
+function k.block(name, sx, sy, sz, cf, color, material, weldTo)
+return k.make("Part", name, Vector3.new(sx, sy, sz), cf, color, material, weldTo, false) end
+function k.wedge(name, sx, sy, sz, cf, color, material, weldTo)
+return k.make("WedgePart", name, Vector3.new(sx, sy, sz), cf, color, material, weldTo, false) end
+function k.cylinder(name, length, diameter, cf, color, material, weldTo)
+return k.make("Part", name, Vector3.new(length, diameter, diameter), cf, color, material, weldTo, SHAPE.CYLINDER) end
+function k.bolt(cf, weldTo) if not DETAIL then return nil end
+return k.cylinder("Bolt", 0.06, 0.16, cf, COLOR.TAN_DARK, MAT.METAL, weldTo) end function k.solid(p) p.CanCollide = true
+p.CanQuery = true return p end function k.seat(className, name, cf, weldTo)
+local s = k.make(className, name, Vector3.new(1.5, 0.4, 1.4), cf, COLOR.SEAT, MAT.FABRIC, weldTo, false) s.CanCollide = true
+s.CanTouch = true s.CanQuery = true return s end function k.anchor(name, x, y, z, weldTo)
+local p = k.block(name, 1.6, 2.4, 1.6, k.at(x, y, z), COLOR.BLACK, MAT.SMOOTH, weldTo) p.Transparency = 1 p.CanQuery = true
+return p end function k.joint(name, part0, part1, offset, c1) local j = Instance.new("Weld") j.Name = name j.Part0 = part0
+j.Part1 = part1 j.C0 = offset j.C1 = c1 j.Parent = part0 return j end return k end local function buildWheel(k, name, x, z, steer)
+local s = 1 if x < 0 then s = -1 end local r, w, y = DIM.WHEEL_R, DIM.WHEEL_W, DIM.WHEEL_R
+local tyre = k.cylinder(name, w, r * 2, k.at(x, y, z), COLOR.RUBBER, MAT.RUBBER, false) tyre.CanCollide = true
+tyre.CanQuery = true local face = x + s * w / 2 k.cylinder("Rim", 0.1, r * 1.2, k.at(face, y, z), COLOR.TAN, MAT.SMOOTH, tyre)
+k.cylinder("Hub", 0.28, r * 0.55, k.at(face + s * 0.12, y, z), COLOR.TAN_DARK, MAT.METAL, tyre)
+k.cylinder("HubCap", 0.12, r * 0.25, k.at(face + s * 0.3, y, z), COLOR.STEEL, MAT.METAL, tyre) if DETAIL then
+k.cylinder("TyreValve", 0.2, 0.12, k.at(face + s * 0.25, y + r * 0.25, z + r * 0.12), COLOR.BLACK, MAT.METAL, tyre)
+for lug = 0, 7 do local a = lug * math.pi / 4
+k.cylinder("LugNut", 0.12, 0.15, k.at(face + s * 0.1, y + r * 0.42 * math.cos(a), z + r * 0.42 * math.sin(a)),
+COLOR.STEEL, MAT.METAL, tyre) end end
+local j = k.joint("WheelJoint", k.chassis, tyre, k.off(x, y - DIM.CHASSIS_Y, z - DIM.CHASSIS_Z), CFrame.new())
+table.insert(k.wheels, { weld = j, base = j.C0, steer = steer }) end local function buildHull(k) local c = k.chassis
+local at, block, wedge, cylinder, solid = k.at, k.block, k.wedge, k.cylinder, k.solid local hx, lx = DIM.HULL_X, DIM.LOWER_X
+local sp, roof = DIM.SPONSON_Y, DIM.ROOF_Y local bz, tail = DIM.BULKHEAD_Z, DIM.TAIL local troopLen = tail - bz
+local troopZ = (tail + bz) / 2 local frontLen = DIM.GLACIS_Z - DIM.NOSE local frontZ = (DIM.GLACIS_Z + DIM.NOSE) / 2
+block("Floor", lx * 2, DIM.FLOOR_Y - DIM.BELLY_Y, tail + 9.4, at(0, (DIM.FLOOR_Y + DIM.BELLY_Y) / 2, (tail - 9.4) / 2), COLOR.TAN_DARK, MAT.SMOOTH, c)
+block("LowerFront", lx * 2, sp - DIM.FLOOR_Y, bz + 9.4, at(0, (sp + DIM.FLOOR_Y) / 2, (bz - 9.4) / 2), COLOR.TAN, MAT.SMOOTH, c)
+wedge("LowerGlacis", lx * 2, sp - DIM.BELLY_Y, 2.2, at(0, (sp + DIM.BELLY_Y) / 2, -10.5) * rz(180), COLOR.TAN, MAT.SMOOTH, c)
+solid(block("Bow", hx * 2, DIM.NOSE_Y - sp, frontLen, at(0, (DIM.NOSE_Y + sp) / 2, frontZ), COLOR.TAN, MAT.SMOOTH, c))
+solid(wedge("UpperGlacis", hx * 2, roof - DIM.NOSE_Y, frontLen, at(0, (roof + DIM.NOSE_Y) / 2, frontZ), COLOR.TAN, MAT.SMOOTH, c))
+block("FrontSection", hx * 2, roof - sp, bz - DIM.GLACIS_Z, at(0, (roof + sp) / 2, (bz + DIM.GLACIS_Z) / 2), COLOR.TAN, MAT.SMOOTH, c)
+for _, s in ipairs({ -1, 1 }) do
+solid(block("LowerWall", 0.3, sp - DIM.FLOOR_Y, troopLen, at(s * (lx - 0.15), (sp + DIM.FLOOR_Y) / 2, troopZ), COLOR.TAN, MAT.SMOOTH, c))
+block("SponsonFloor", hx - lx, 0.2, troopLen, at(s * (hx + lx) / 2, sp + 0.1, troopZ), COLOR.TAN, MAT.SMOOTH, c)
+solid(block("UpperWall", 0.3, roof - sp, troopLen, at(s * (hx - 0.15), (roof + sp) / 2, troopZ), COLOR.TAN, MAT.SMOOTH, c))
+block("WallLiner", 0.05, sp - DIM.FLOOR_Y - 0.1, troopLen - 0.4, at(s * (lx - 0.33), (sp + DIM.FLOOR_Y) / 2, troopZ), COLOR.INTERIOR, MAT.SMOOTH, c)
+block("WallLiner", 0.05, roof - sp - 0.5, troopLen - 0.4, at(s * (hx - 0.33), (roof + sp) / 2 - 0.1, troopZ), COLOR.INTERIOR, MAT.SMOOTH, c)
+solid(block("RearPillar", hx - DIM.RAMP_W / 2, roof - sp, 0.3, at(s * (hx + DIM.RAMP_W / 2) / 2, (roof + sp) / 2, tail - 0.15), COLOR.TAN, MAT.SMOOTH, c))
+solid(block("RearPillar", lx - DIM.RAMP_W / 2, sp - DIM.FLOOR_Y, 0.3, at(s * (lx + DIM.RAMP_W / 2) / 2, (sp + DIM.FLOOR_Y) / 2, tail - 0.15), COLOR.TAN, MAT.SMOOTH, c))
+end solid(block("Roof", hx * 2, 0.3, troopLen, at(0, roof - 0.15, troopZ), COLOR.TAN, MAT.SMOOTH, c))
+block("RoofLiner", hx * 2 - 0.8, 0.05, troopLen - 0.4, at(0, roof - 0.33, troopZ), COLOR.INTERIOR, MAT.SMOOTH, c)
+solid(block("RampHeader", DIM.RAMP_W, roof - DIM.FLOOR_Y - DIM.RAMP_H, 0.3, at(0, (roof + DIM.FLOOR_Y + DIM.RAMP_H) / 2, tail - 0.15), COLOR.TAN, MAT.SMOOTH, c))
+solid(block("FloorMat", lx * 2 - 0.6, 0.05, troopLen - 0.4, at(0, DIM.FLOOR_Y + 0.03, troopZ), COLOR.INTERIOR, MAT.FABRIC, c))
+solid(block("BulkheadLiner", lx * 2 - 0.6, roof - DIM.FLOOR_Y - 0.6, 0.05, at(0, (roof + DIM.FLOOR_Y) / 2 - 0.1, bz + 0.03), COLOR.INTERIOR, MAT.SMOOTH, c))
+for _, lz in ipairs({ 2.5, 6.5, 10.0 }) do block("DomeLight", 0.6, 0.08, 0.3, at(0, roof - 0.38, lz), COLOR.LAMP, MAT.NEON, c) end
+for _, z in ipairs(DIM.AXLES) do
+cylinder("Axle", DIM.WHEEL_X * 2 - DIM.WHEEL_W, 0.45, at(0, DIM.WHEEL_R, z), COLOR.STEEL, MAT.METAL, c)
+block("Differential", 1.2, 0.9, 1.0, at(0, DIM.WHEEL_R, z), COLOR.STEEL, MAT.METAL, c) end end local function buildArmour(k)
+local c = k.chassis local at, block, bolt = k.at, k.block, k.bolt local hx = DIM.HULL_X local rise = DIM.ROOF_Y - DIM.NOSE_Y
+local run = DIM.GLACIS_Z - DIM.NOSE local slope = math.deg(math.atan(rise / run)) for _, s in ipairs({ -1, 1 }) do
+for col = 0, 6 do local z = -6.95 + col * 2.62 + 1.275 for row = 0, 1 do local y = 3.95 + row * 1.37 + 0.65
+if not (s > 0 and row == 0 and col <= 1) then
+block("ArmourTile", 0.12, 1.3, 2.55, at(s * (hx + 0.06), y, z), COLOR.TAN, MAT.SMOOTH, c) if DETAIL then
+for _, dy in ipairs({ -0.45, 0.45 }) do for _, dz in ipairs({ -1.0, 1.0 }) do bolt(at(s * (hx + 0.15), y + dy, z + dz), c) end end
+end end end end block("BowTile", 0.12, 1.4, 3.6, at(s * (hx + 0.06), 4.5, -9.6), COLOR.TAN, MAT.SMOOTH, c) if DETAIL then
+for _, dz in ipairs({ -1.4, 0, 1.4 }) do bolt(at(s * (hx + 0.15), 4.95, -9.6 + dz), c)
+bolt(at(s * (hx + 0.15), 4.05, -9.6 + dz), c) end end end for ix = -1, 1 do for iz = 0, 1 do local z = DIM.NOSE + 1.2 + iz * 2.1
+local y = DIM.NOSE_Y + rise * (z - DIM.NOSE) / run + 0.06 local frame = at(ix * 2.75, y, z) * rx(-slope)
+block("GlacisTile", 2.6, 0.12, 2.0, frame, COLOR.TAN, MAT.SMOOTH, c) if DETAIL then for _, dx in ipairs({ -1.05, 1.05 }) do
+for _, dz in ipairs({ -0.8, 0.8 }) do bolt(frame * k.off(dx, 0.08, dz) * rz(90), c) end end end end end end
+S.buildArmour, S.buildHull, S.buildWheel, S.gunnerFire, S.hideAimDot, S.keepRunning, S.makeAimDot, S.newKit = buildArmour, buildHull, buildWheel, gunnerFire, hideAimDot, keepRunning, makeAimDot, newKit
+S.newPrompt, S.seatPlayer, S.setEnabled, S.setPromptField, S.shoot, S.showAimDot = newPrompt, seatPlayer, setEnabled, setPromptField, shoot, showAimDot
+S.ready[2] = true print("[Stryker] part 2 of 6 loaded")
