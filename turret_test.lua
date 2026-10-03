@@ -41,9 +41,14 @@ local T = {
   lastFire = "none yet", aimError = "none", lastTick = 0,
 }
 
+-- Every copy of this addon gets its own number, shown in all its messages.
+local COPY_ID = tostring(math.random(1000, 9999))
+local STARTED = tick()
+local retired = false
+
 local function tell(message, player)
-  print("[Turret] " .. message)
-  pcall(announce, message, player)
+  print("[Turret " .. COPY_ID .. "] " .. message)
+  pcall(announce, "[copy " .. COPY_ID .. "] " .. message, player)
 end
 
 local function nameOf(who)
@@ -306,8 +311,21 @@ end
 -- Build: roof section with the turret, commander seat underneath (Stryker positions)
 ---------------------------------------------------------------------------------------------
 
+local function removeOldTurrets()
+  for _ = 1, 10 do
+    local old = nil
+    pcall(function() old = f("StrykerTurretTest") end)
+    if not old then return end
+    pcall(function() old:Destroy() end)
+    local gone = true
+    pcall(function() gone = old.Parent == nil end)
+    if not gone then return end
+  end
+end
+
 local function build(player)
   clear()
+  removeOldTurrets()
   local started = tick()
   local cf = nil
   pcall(function() cf = getPlayerPosition(player) end)
@@ -376,8 +394,9 @@ end
 
 task.spawn(function()
   local last = tick()
-  while true do
-    task.wait(0.03)
+  local lastBeat = 0
+  while not retired do
+    task.wait(0.05)
     local now = tick()
     local dt = math.min(now - last, 0.3)
     last = now
@@ -414,6 +433,10 @@ task.spawn(function()
     end
     T.slowestTick = math.max(T.slowestTick, tick() - now)
     T.lastTick = tick()
+    if now - lastBeat >= 5 then
+      lastBeat = now
+      print("[Turret " .. COPY_ID .. "] alive: " .. T.ticks .. " aim ticks, " .. T.shots .. " shots")
+    end
   end
 end)
 
@@ -429,7 +452,7 @@ local function report(player)
   end
   local lines = {
     "Turret report: " .. table.concat(worked, ", "),
-    string.format("Built %d parts in %.1f s. Aim loop ran %d ticks (about 30 a second is healthy), slowest tick %.0f ms. Clicks %d, shots %d.",
+    string.format("Built %d parts in %.1f s. Aim loop ran %d ticks (about 20 a second is healthy), slowest tick %.0f ms. Clicks %d, shots %d.",
       T.parts, T.buildTime, T.ticks, T.slowestTick * 1000, T.clicks, T.shots),
     "Last click: " .. T.lastClick,
     "Last shot: " .. T.lastFire,
@@ -438,6 +461,44 @@ local function report(player)
   }
   for _, line in ipairs(lines) do tell(line, player) end
 end
+
+-- One copy at a time. Each copy puts a marker named after its start time in the map; when a
+-- copy sees a newer marker it stops (its loop ends and it ignores commands).
+local markerName = "TurretTestCopy#" .. string.format("%d", math.floor(STARTED * 1000) % 1000000000) .. "#" .. COPY_ID
+pcall(function()
+  local marker = Instance.new("Part")
+  marker.Name = markerName
+  marker.Anchored = true
+  marker.CanCollide = false
+  marker.Transparency = 1
+  marker.Size = Vector3.new(0.2, 0.2, 0.2)
+  marker.CFrame = CFrame.new(0, 3000, 0)
+  f(marker)
+end)
+local function newerCopyRunning()
+  local newer = false
+  pcall(function()
+    local root = nil
+    local probe = f(markerName)
+    if probe then root = probe.Parent end
+    if not root then return end
+    local mine = tonumber(string.match(markerName, "#(%d+)#"))
+    for _, inst in ipairs(root:GetChildren()) do
+      local stamp = tonumber(string.match(inst.Name, "^TurretTestCopy#(%d+)#"))
+      if stamp and stamp > mine then newer = true end
+    end
+  end)
+  return newer
+end
+task.spawn(function()
+  while not retired do
+    task.wait(2)
+    if newerCopyRunning() then
+      retired = true
+      print("[Turret " .. COPY_ID .. "] a newer copy started, this copy stops now")
+    end
+  end
+end)
 
 -- does the game send a click position with mousedown? (the Stryker's click-to-aim needs it)
 event("mousedown", function(data)
@@ -453,13 +514,14 @@ event("chatted", function(data)
   local message = data.Value[2]
   if type(player) ~= "string" or type(message) ~= "string" then return end
   local command = string.lower(message)
+  if retired or string.sub(command, 1, 7) ~= ":turret" then return end
   if command == ":turret" then
     task.spawn(build, player)
   elseif command == ":turret report" then
     task.spawn(report, player)
   elseif command == ":turret ping" then
-    tell("Turret test is alive. Aim loop ticks: " .. T.ticks .. ", last ran "
-      .. tostring(math.floor((tick() - T.lastTick) * 10) / 10) .. " s ago.", player)
+    tell("Turret test is alive (running " .. tostring(math.floor(tick() - STARTED)) .. " s). Aim loop ticks: " .. T.ticks
+      .. ", last ran " .. tostring(math.floor((tick() - T.lastTick) * 10) / 10) .. " s ago.", player)
   elseif command == ":turret fire" then
     task.spawn(function()
       local ok, err = pcall(fireShot, player, ":turret fire")
@@ -472,4 +534,4 @@ event("chatted", function(data)
   end
 end)
 
-print("[Turret] Stryker turret test loaded. Type :turret to build it.")
+print("[Turret " .. COPY_ID .. "] Stryker turret test loaded. Type :turret to build it.")
