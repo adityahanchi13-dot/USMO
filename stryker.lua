@@ -63,6 +63,17 @@ local GUN = {
   AUTO = false, -- true = fires by itself when the red dot is on an enemy
 }
 
+-- atan2 from plain math.atan (some Lua 5 builds have no math.atan2)
+local function atan2(y, x)
+  if x > 0 then return math.atan(y / x) end
+  if x < 0 then
+    if y >= 0 then return math.atan(y / x) + math.pi end
+    return math.atan(y / x) - math.pi
+  end
+  if y > 0 then return math.pi / 2 elseif y < 0 then return -math.pi / 2 end
+  return 0
+end
+
 local function rx(deg) return CFrame.Angles(math.rad(deg), 0, 0) end
 local function ry(deg) return CFrame.Angles(0, math.rad(deg), 0) end
 local function rz(deg) return CFrame.Angles(0, 0, math.rad(deg)) end
@@ -1291,7 +1302,7 @@ end
 
 local function headingOf(cf)
   local look = cf.LookVector
-  return math.atan2(-look.X, -look.Z)
+  return atan2(-look.X, -look.Z)
 end
 
 local function yawFrame(pos, heading)
@@ -1425,8 +1436,8 @@ local function driveStryker(entry)
             if state.grounded then state.vy = 0 end
           end
           local pitch, roll = state.pitch, state.roll
-          if heights.front and heights.rear then pitch = math.atan2(heights.front - heights.rear, wheelbase) end
-          if heights.left and heights.right then roll = math.atan2(heights.right - heights.left, track) end
+          if heights.front and heights.rear then pitch = atan2(heights.front - heights.rear, wheelbase) end
+          if heights.left and heights.right then roll = atan2(heights.right - heights.left, track) end
           local k = blend(DRIVE.TILT_BLEND, dt)
           state.pitch = state.pitch + (pitch - state.pitch) * k
           state.roll = state.roll + (roll - state.roll) * k
@@ -1477,8 +1488,8 @@ local function anglesToward(entry, point)
   local cf = entry.chassis.CFrame
   local d = point - entry.cradle.Position
   local lx, ly, lz = d:Dot(cf.RightVector), d:Dot(cf.UpVector), -d:Dot(cf.LookVector)
-  local yaw = math.atan2(-lx, -lz)
-  local pitch = math.atan2(ly, math.sqrt(lx * lx + lz * lz))
+  local yaw = atan2(-lx, -lz)
+  local pitch = atan2(ly, math.sqrt(lx * lx + lz * lz))
   return yaw, math.max(GUN.MIN_PITCH, math.min(GUN.MAX_PITCH, pitch))
 end
 
